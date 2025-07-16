@@ -1,582 +1,394 @@
-// AI Memory Bank Frontend JavaScript
-class MemoryBankFrontend {
+/**
+ * AI Memory Bank - Frontend JavaScript
+ * Handles user interactions, API calls, and UI updates
+ */
+
+class AIMemoryBank {
     constructor() {
-        this.apiBase = 'http://localhost:8000';
-        this.uploadedFiles = [];
+        this.apiBase = '';
         this.init();
     }
 
     init() {
         this.setupEventListeners();
-        this.loadInitialData();
+        this.loadStatistics();
+        this.setupDragAndDrop();
     }
 
     setupEventListeners() {
-        // File upload
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-
-        uploadArea.addEventListener('click', () => fileInput.click());
-        uploadArea.addEventListener('dragover', this.handleDragOver.bind(this));
-        uploadArea.addEventListener('dragleave', this.handleDragLeave.bind(this));
-        uploadArea.addEventListener('drop', this.handleDrop.bind(this));
-        fileInput.addEventListener('change', this.handleFileSelect.bind(this));
-
-        // Search
+        // Search functionality
         const searchBtn = document.getElementById('searchBtn');
         const searchInput = document.getElementById('searchInput');
         
-        searchBtn.addEventListener('click', this.performSearch.bind(this));
+        searchBtn.addEventListener('click', () => this.performSearch());
         searchInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.performSearch();
+            if (e.key === 'Enter') {
+                this.performSearch();
+            }
         });
 
-        // Header actions
-        document.getElementById('statsBtn').addEventListener('click', this.showStatistics.bind(this));
-        document.getElementById('clearBtn').addEventListener('click', this.clearAllData.bind(this));
+        // File upload
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        
+        fileInput.addEventListener('change', (e) => this.handleFileUpload(e.target.files));
+        uploadArea.addEventListener('click', () => fileInput.click());
 
-        // Quick actions
-        document.getElementById('addTextBtn').addEventListener('click', this.showAddTextModal.bind(this));
-        document.getElementById('exportBtn').addEventListener('click', this.exportData.bind(this));
-        document.getElementById('importBtn').addEventListener('click', this.importData.bind(this));
-        document.getElementById('refreshBtn').addEventListener('click', this.refreshData.bind(this));
+        // Text storage
+        const storeTextBtn = document.getElementById('storeTextBtn');
+        storeTextBtn.addEventListener('click', () => this.storeText());
 
-        // Modal
-        document.getElementById('modalClose').addEventListener('click', this.closeModal.bind(this));
-        document.getElementById('modalOverlay').addEventListener('click', (e) => {
-            if (e.target.id === 'modalOverlay') this.closeModal();
+        // Notification close
+        const notificationClose = document.querySelector('.notification-close');
+        if (notificationClose) {
+            notificationClose.addEventListener('click', () => this.hideNotification());
+        }
+    }
+
+    setupDragAndDrop() {
+        const uploadArea = document.getElementById('uploadArea');
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = Array.from(e.dataTransfer.files);
+            this.handleFileUpload(files);
         });
     }
 
-    // File Upload Methods
-    handleDragOver(e) {
-        e.preventDefault();
-        document.getElementById('uploadArea').classList.add('dragover');
+    async performSearch() {
+        const query = document.getElementById('searchInput').value.trim();
+        const topK = parseInt(document.getElementById('topK').value) || 5;
+        
+        if (!query) {
+            this.showNotification('Please enter a search query', 'warning', 'fas fa-exclamation-triangle');
+            return;
+        }
+
+        this.showLoading();
+        
+        try {
+            const response = await fetch('/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    query: query,
+                    top_k: topK
+                })
+            });
+
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.detail || 'Search failed');
+            }
+
+            this.displaySearchResults(data.results, query);
+            
+            if (data.results.length === 0) {
+                this.showNotification('No results found for your query', 'warning', 'fas fa-search');
+            }
+
+        } catch (error) {
+            console.error('Search error:', error);
+            this.showNotification(`Search failed: ${error.message}`, 'error', 'fas fa-exclamation-circle');
+        } finally {
+            this.hideLoading();
+        }
     }
 
-    handleDragLeave(e) {
-        e.preventDefault();
-        document.getElementById('uploadArea').classList.remove('dragover');
+    displaySearchResults(results, query) {
+        const resultsContainer = document.getElementById('searchResults');
+        
+        if (results.length === 0) {
+            resultsContainer.innerHTML = `
+                <div class="no-results">
+                    <i class="fas fa-search fa-3x"></i>
+                    <h3>No results found</h3>
+                    <p>Try different keywords or check your spelling</p>
+                </div>
+            `;
+            resultsContainer.classList.add('visible');
+            return;
+        }
+
+        const resultsHTML = results.map((result, index) => `
+            <div class="result-card">
+                <div class="result-header">
+                    <div class="result-score">Score: ${result.score.toFixed(3)}</div>
+                </div>
+                <div class="result-file">
+                    <i class="fas fa-file"></i> ${result.document_info.file_path}
+                </div>
+                <div class="result-text">
+                    ${this.highlightText(result.text, query)}
+                </div>
+            </div>
+        `).join('');
+
+        resultsContainer.innerHTML = `
+            <div class="results-header">
+                <h3><i class="fas fa-search"></i> Search Results for "${query}" (${results.length} found)</h3>
+            </div>
+            ${resultsHTML}
+        `;
+        
+        resultsContainer.classList.add('visible');
+        resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    handleDrop(e) {
-        e.preventDefault();
-        document.getElementById('uploadArea').classList.remove('dragover');
-        const files = Array.from(e.dataTransfer.files);
-        this.uploadFiles(files);
+    highlightText(text, query) {
+        if (!query) return text;
+        
+        const words = query.toLowerCase().split(' ').filter(word => word.length > 2);
+        let highlightedText = text;
+        
+        words.forEach(word => {
+            const regex = new RegExp(`(${word})`, 'gi');
+            highlightedText = highlightedText.replace(regex, '<mark>$1</mark>');
+        });
+        
+        return highlightedText;
     }
 
-    handleFileSelect(e) {
-        const files = Array.from(e.target.files);
-        this.uploadFiles(files);
-    }
+    async handleFileUpload(files) {
+        if (!files || files.length === 0) return;
 
-    async uploadFiles(files) {
-        if (files.length === 0) return;
+        const supportedTypes = ['.pdf', '.md', '.markdown', '.txt', '.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'];
+        const validFiles = Array.from(files).filter(file => {
+            const extension = '.' + file.name.split('.').pop().toLowerCase();
+            return supportedTypes.includes(extension);
+        });
 
-        this.showLoading('Uploading files...');
+        if (validFiles.length === 0) {
+            this.showNotification('No supported files selected', 'warning', 'fas fa-file-exclamation');
+            return;
+        }
+
+        if (validFiles.length < files.length) {
+            this.showNotification(`${files.length - validFiles.length} unsupported files skipped`, 'warning', 'fas fa-exclamation-triangle');
+        }
+
         this.showUploadProgress();
-
-        const totalFiles = files.length;
-        let completedFiles = 0;
-
-        for (const file of files) {
+        
+        let successCount = 0;
+        
+        for (let i = 0; i < validFiles.length; i++) {
+            const file = validFiles[i];
+            
             try {
                 await this.uploadSingleFile(file);
-                completedFiles++;
-                this.updateUploadProgress(completedFiles, totalFiles);
+                successCount++;
+                
+                // Update progress
+                const progress = ((i + 1) / validFiles.length) * 100;
+                this.updateUploadProgress(progress, `Processing ${file.name}...`);
+                
             } catch (error) {
-                console.error('Upload failed for file:', file.name, error);
-                this.addFileItem(file.name, 'error', error.message);
+                console.error(`Error uploading ${file.name}:`, error);
+                this.showNotification(`Failed to upload ${file.name}: ${error.message}`, 'error', 'fas fa-exclamation-circle');
             }
         }
 
-        this.hideLoading();
         this.hideUploadProgress();
-        this.refreshData();
+        
+        if (successCount > 0) {
+            this.showNotification(`Successfully uploaded ${successCount} file(s)`, 'success', 'fas fa-check-circle');
+            this.loadStatistics(); // Refresh stats
+        }
+
+        // Clear file input
+        document.getElementById('fileInput').value = '';
     }
 
     async uploadSingleFile(file) {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch(`${this.apiBase}/upload`, {
+        const response = await fetch('/upload', {
             method: 'POST',
             body: formData
         });
 
+        const data = await response.json();
+        
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Upload failed');
+            throw new Error(data.detail || 'Upload failed');
         }
 
-        const result = await response.json();
-        this.addFileItem(file.name, 'success', `${result.chunks_added} chunks added`);
+        return data;
     }
 
-    addFileItem(fileName, status, message) {
-        const uploadedFiles = document.getElementById('uploadedFiles');
-        const fileItem = document.createElement('div');
-        fileItem.className = 'file-item';
+    async storeText() {
+        const text = document.getElementById('textInput').value.trim();
         
-        const fileIcon = this.getFileIcon(fileName);
+        if (!text) {
+            this.showNotification('Please enter some text', 'warning', 'fas fa-exclamation-triangle');
+            return;
+        }
+
+        this.showLoading();
         
-        fileItem.innerHTML = `
-            <div class="file-info">
-                <i class="file-icon ${fileIcon}"></i>
-                <div class="file-details">
-                    <h4>${fileName}</h4>
-                    <p>${message}</p>
-                </div>
-            </div>
-            <span class="file-status status-${status}">${status}</span>
-        `;
-        
-        uploadedFiles.appendChild(fileItem);
+        try {
+            const response = await fetch('/store-text', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ text: text })
+            });
+
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.detail || 'Failed to store text');
+            }
+
+            this.showNotification('Text stored successfully!', 'success', 'fas fa-check-circle');
+            document.getElementById('textInput').value = '';
+            this.loadStatistics(); // Refresh stats
+
+        } catch (error) {
+            console.error('Store text error:', error);
+            this.showNotification(`Failed to store text: ${error.message}`, 'error', 'fas fa-exclamation-circle');
+        } finally {
+            this.hideLoading();
+        }
     }
 
-    getFileIcon(fileName) {
-        const ext = fileName.split('.').pop().toLowerCase();
-        const iconMap = {
-            'pdf': 'fas fa-file-pdf',
-            'md': 'fas fa-file-alt',
-            'txt': 'fas fa-file-alt',
-            'xlsx': 'fas fa-file-excel',
-            'xls': 'fas fa-file-excel',
-            'docx': 'fas fa-file-word',
-            'doc': 'fas fa-file-word',
-            'pptx': 'fas fa-file-powerpoint',
-            'ppt': 'fas fa-file-powerpoint'
-        };
-        return iconMap[ext] || 'fas fa-file';
+    async loadStatistics() {
+        try {
+            const response = await fetch('/statistics');
+            const stats = await response.json();
+            
+            if (!response.ok) {
+                throw new Error('Failed to load statistics');
+            }
+
+            this.updateStatistics(stats);
+
+        } catch (error) {
+            console.error('Statistics error:', error);
+            // Don't show notification for stats error, just log it
+        }
     }
 
-    updateUploadProgress(completed, total) {
-        const percentage = Math.round((completed / total) * 100);
-        document.getElementById('progressText').textContent = `${percentage}%`;
-        document.getElementById('progressFill').style.width = `${percentage}%`;
-        document.getElementById('uploadStatus').textContent = `Processed ${completed} of ${total} files`;
+    updateStatistics(stats) {
+        document.getElementById('totalDocs').textContent = stats.total_documents || 0;
+        document.getElementById('totalChunks').textContent = stats.total_chunks || 0;
+        document.getElementById('dbSize').textContent = `${(stats.database_size_mb || 0).toFixed(1)} MB`;
+        
+        // Format last updated date
+        if (stats.last_updated) {
+            const date = new Date(stats.last_updated);
+            document.getElementById('lastUpdated').textContent = date.toLocaleDateString();
+        } else {
+            document.getElementById('lastUpdated').textContent = 'Never';
+        }
     }
 
     showUploadProgress() {
-        document.getElementById('uploadProgress').style.display = 'block';
+        const progressContainer = document.getElementById('uploadProgress');
+        progressContainer.classList.remove('hidden');
+        this.updateUploadProgress(0, 'Starting upload...');
+    }
+
+    updateUploadProgress(percentage, message) {
+        const progressFill = document.querySelector('.progress-fill');
+        const progressText = document.querySelector('.progress-text');
+        
+        progressFill.style.width = `${percentage}%`;
+        progressText.textContent = message;
     }
 
     hideUploadProgress() {
-        document.getElementById('uploadProgress').style.display = 'none';
+        setTimeout(() => {
+            document.getElementById('uploadProgress').classList.add('hidden');
+        }, 1000);
     }
 
-    // Search Methods
-    async performSearch() {
-        const query = document.getElementById('searchInput').value.trim();
-        if (!query) {
-            this.showNotification('Please enter a search query', 'warning');
-            return;
-        }
-
-        const topK = parseInt(document.getElementById('topK').value);
-        const threshold = parseFloat(document.getElementById('threshold').value);
-
-        this.showLoading('Searching...');
-
-        try {
-            const response = await fetch(`${this.apiBase}/search`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    query: query,
-                    top_k: topK,
-                    similarity_threshold: threshold
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('Search failed');
-            }
-
-            const result = await response.json();
-            this.displaySearchResults(result);
-        } catch (error) {
-            console.error('Search error:', error);
-            this.showNotification('Search failed: ' + error.message, 'error');
-        } finally {
-            this.hideLoading();
-        }
-    }
-
-    displaySearchResults(result) {
-        const searchResults = document.getElementById('searchResults');
-        
-        if (result.results.length === 0) {
-            searchResults.innerHTML = `
-                <div class="text-center" style="padding: 40px; color: #6c757d;">
-                    <i class="fas fa-search" style="font-size: 3rem; margin-bottom: 16px; opacity: 0.5;"></i>
-                    <h3>No results found</h3>
-                    <p>Try adjusting your search query or similarity threshold</p>
-                </div>
-            `;
-            return;
-        }
-
-        searchResults.innerHTML = `
-            <div class="mb-2">
-                <h3>Found ${result.total_results} results for "${result.query}"</h3>
-            </div>
-        `;
-
-        result.results.forEach((item, index) => {
-            const resultItem = document.createElement('div');
-            resultItem.className = 'result-item';
-            
-            const fileName = item.metadata.file_path.split('/').pop();
-            const similarity = (item.similarity_score * 100).toFixed(1);
-            
-            resultItem.innerHTML = `
-                <div class="result-header">
-                    <div class="result-meta">
-                        <span class="result-file">${fileName}</span>
-                        <span class="result-type">${item.metadata.file_type}</span>
-                        ${item.metadata.chunk_index !== undefined ? 
-                            `<span class="result-type">Chunk ${item.metadata.chunk_index + 1}/${item.metadata.total_chunks}</span>` : 
-                            ''
-                        }
-                    </div>
-                    <span class="result-similarity">${similarity}%</span>
-                </div>
-                <div class="result-content">
-                    ${this.highlightQuery(item.content, result.query)}
-                </div>
-                <div class="result-footer">
-                    <span>Rank: ${item.rank}</span>
-                    <span>Size: ${item.metadata.chunk_size} chars</span>
-                </div>
-            `;
-            
-            searchResults.appendChild(resultItem);
-        });
-    }
-
-    highlightQuery(content, query) {
-        const queryWords = query.toLowerCase().split(' ');
-        let highlightedContent = content;
-        
-        queryWords.forEach(word => {
-            if (word.length > 2) {
-                const regex = new RegExp(`(${word})`, 'gi');
-                highlightedContent = highlightedContent.replace(regex, '<mark>$1</mark>');
-            }
-        });
-        
-        return highlightedContent;
-    }
-
-    // Statistics Methods
-    async showStatistics() {
-        this.showLoading('Loading statistics...');
-        
-        try {
-            const response = await fetch(`${this.apiBase}/statistics`);
-            if (!response.ok) throw new Error('Failed to load statistics');
-            
-            const result = await response.json();
-            this.displayStatistics(result.statistics);
-        } catch (error) {
-            console.error('Statistics error:', error);
-            this.showNotification('Failed to load statistics', 'error');
-        } finally {
-            this.hideLoading();
-        }
-    }
-
-    displayStatistics(stats) {
-        const modalTitle = document.getElementById('modalTitle');
-        const modalContent = document.getElementById('modalContent');
-        
-        modalTitle.textContent = 'Memory Bank Statistics';
-        
-        modalContent.innerHTML = `
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value">${stats.total_entries || 0}</div>
-                    <div class="stat-label">Total Entries</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${stats.total_vectors || 0}</div>
-                    <div class="stat-label">Total Vectors</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${stats.unique_files || 0}</div>
-                    <div class="stat-label">Unique Files</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${stats.total_content_length ? (stats.total_content_length / 1000).toFixed(1) + 'K' : 0}</div>
-                    <div class="stat-label">Content Size (chars)</div>
-                </div>
-            </div>
-            
-            ${stats.file_types ? `
-                <h4>File Types</h4>
-                <div class="stats-grid">
-                    ${Object.entries(stats.file_types).map(([type, count]) => `
-                        <div class="stat-card">
-                            <div class="stat-value">${count}</div>
-                            <div class="stat-label">${type}</div>
-                        </div>
-                    `).join('')}
-                </div>
-            ` : ''}
-            
-            <div class="text-center mt-3">
-                <button class="btn btn-primary" onclick="memoryBank.refreshData()">
-                    <i class="fas fa-sync-alt"></i>
-                    Refresh
-                </button>
-            </div>
-        `;
-        
-        this.showModal();
-    }
-
-    // Text Input Methods
-    showAddTextModal() {
-        const modalTitle = document.getElementById('modalTitle');
-        const modalContent = document.getElementById('modalContent');
-        
-        modalTitle.textContent = 'Add Text Content';
-        
-        modalContent.innerHTML = `
-            <form id="addTextForm">
-                <div class="form-group">
-                    <label for="textContent">Text Content</label>
-                    <textarea id="textContent" placeholder="Enter the text content you want to add to your memory bank..." required></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="textMetadata">Metadata (optional)</label>
-                    <input type="text" id="textMetadata" placeholder="e.g., source, category, tags">
-                </div>
-                <div class="text-center">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-plus"></i>
-                        Add Text
-                    </button>
-                </div>
-            </form>
-        `;
-        
-        this.showModal();
-        
-        // Add form submit handler
-        document.getElementById('addTextForm').addEventListener('submit', this.handleAddText.bind(this));
-    }
-
-    async handleAddText(e) {
-        e.preventDefault();
-        
-        const text = document.getElementById('textContent').value.trim();
-        const metadata = document.getElementById('textMetadata').value.trim();
-        
-        if (!text) {
-            this.showNotification('Please enter some text content', 'warning');
-            return;
-        }
-        
-        this.closeModal();
-        this.showLoading('Adding text content...');
-        
-        try {
-            const response = await fetch(`${this.apiBase}/store-text`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    text: text,
-                    metadata: metadata ? { source: metadata } : undefined
-                })
-            });
-            
-            if (!response.ok) throw new Error('Failed to add text');
-            
-            this.showNotification('Text content added successfully!', 'success');
-            this.refreshData();
-        } catch (error) {
-            console.error('Add text error:', error);
-            this.showNotification('Failed to add text: ' + error.message, 'error');
-        } finally {
-            this.hideLoading();
-        }
-    }
-
-    // Data Management Methods
-    async clearAllData() {
-        if (!confirm('Are you sure you want to clear all data? This action cannot be undone.')) {
-            return;
-        }
-        
-        this.showLoading('Clearing all data...');
-        
-        try {
-            const response = await fetch(`${this.apiBase}/clear`, {
-                method: 'POST'
-            });
-            
-            if (!response.ok) throw new Error('Failed to clear data');
-            
-            this.showNotification('All data cleared successfully!', 'success');
-            this.refreshData();
-        } catch (error) {
-            console.error('Clear data error:', error);
-            this.showNotification('Failed to clear data: ' + error.message, 'error');
-        } finally {
-            this.hideLoading();
-        }
-    }
-
-    async exportData() {
-        this.showLoading('Preparing export...');
-        
-        try {
-            const response = await fetch(`${this.apiBase}/statistics`);
-            if (!response.ok) throw new Error('Failed to get data');
-            
-            const result = await response.json();
-            
-            // Create a simple export (you could enhance this to get actual data)
-            const exportData = {
-                exported_at: new Date().toISOString(),
-                statistics: result.statistics,
-                note: 'This is a statistics export. For full data export, use the CLI command.'
-            };
-            
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `memory-bank-export-${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-            
-            this.showNotification('Export completed!', 'success');
-        } catch (error) {
-            console.error('Export error:', error);
-            this.showNotification('Export failed: ' + error.message, 'error');
-        } finally {
-            this.hideLoading();
-        }
-    }
-
-    importData() {
-        this.showNotification('Import functionality is available via the CLI. Use: python app.py import <file>', 'info');
-    }
-
-    async refreshData() {
-        // Clear uploaded files display
-        document.getElementById('uploadedFiles').innerHTML = '';
-        
-        // Clear search results
-        document.getElementById('searchResults').innerHTML = '';
-        
-        this.showNotification('Data refreshed!', 'success');
-    }
-
-    async loadInitialData() {
-        // You could load initial statistics or recent files here
-        console.log('Memory Bank Frontend initialized');
-    }
-
-    // UI Utility Methods
-    showModal() {
-        document.getElementById('modalOverlay').style.display = 'flex';
-    }
-
-    closeModal() {
-        document.getElementById('modalOverlay').style.display = 'none';
-    }
-
-    showLoading(message = 'Loading...') {
-        document.getElementById('loadingText').textContent = message;
-        document.getElementById('loadingOverlay').style.display = 'flex';
+    showLoading() {
+        document.getElementById('loadingOverlay').classList.remove('hidden');
     }
 
     hideLoading() {
-        document.getElementById('loadingOverlay').style.display = 'none';
+        document.getElementById('loadingOverlay').classList.add('hidden');
     }
 
-    showNotification(message, type = 'info') {
-        // Create notification element
-        const notification = document.createElement('div');
-        notification.className = `notification notification-${type}`;
-        notification.innerHTML = `
-            <i class="fas fa-${this.getNotificationIcon(type)}"></i>
-            <span>${message}</span>
-            <button onclick="this.parentElement.remove()">
-                <i class="fas fa-times"></i>
-            </button>
-        `;
+    showNotification(message, type = 'info', icon = 'fas fa-info-circle') {
+        const notification = document.getElementById('notification');
+        const notificationIcon = notification.querySelector('.notification-icon');
+        const notificationMessage = notification.querySelector('.notification-message');
         
-        // Add styles
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: ${this.getNotificationColor(type)};
-            color: white;
-            padding: 12px 16px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            z-index: 3000;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            max-width: 400px;
-            animation: slideIn 0.3s ease;
-        `;
+        // Set icon and message
+        notificationIcon.className = `notification-icon ${icon}`;
+        notificationMessage.textContent = message;
         
-        // Add animation styles
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes slideIn {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-        `;
-        document.head.appendChild(style);
+        // Set type class
+        notification.className = `notification ${type}`;
         
-        document.body.appendChild(notification);
+        // Show notification
+        notification.classList.remove('hidden');
         
-        // Auto remove after 5 seconds
+        // Auto-hide after 5 seconds
         setTimeout(() => {
-            if (notification.parentElement) {
-                notification.remove();
-            }
+            this.hideNotification();
         }, 5000);
     }
 
-    getNotificationIcon(type) {
-        const icons = {
-            success: 'check-circle',
-            error: 'exclamation-circle',
-            warning: 'exclamation-triangle',
-            info: 'info-circle'
-        };
-        return icons[type] || 'info-circle';
-    }
-
-    getNotificationColor(type) {
-        const colors = {
-            success: '#28a745',
-            error: '#dc3545',
-            warning: '#ffc107',
-            info: '#17a2b8'
-        };
-        return colors[type] || '#17a2b8';
+    hideNotification() {
+        document.getElementById('notification').classList.add('hidden');
     }
 }
 
-// Initialize the frontend when the page loads
-let memoryBank;
+// Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    memoryBank = new MemoryBankFrontend();
-}); 
+    new AIMemoryBank();
+});
+
+// Add some helpful CSS for highlighted search terms
+const style = document.createElement('style');
+style.textContent = `
+    mark {
+        background-color: #ffeb3b;
+        padding: 1px 3px;
+        border-radius: 3px;
+        font-weight: bold;
+    }
+    
+    .no-results {
+        text-align: center;
+        padding: 40px;
+        color: #6c757d;
+    }
+    
+    .no-results i {
+        margin-bottom: 20px;
+        color: #dee2e6;
+    }
+    
+    .results-header {
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .results-header h3 {
+        color: #495057;
+        font-size: 1.2rem;
+    }
+`;
+document.head.appendChild(style); 

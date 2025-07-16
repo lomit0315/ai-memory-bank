@@ -1,114 +1,95 @@
 #!/usr/bin/env python3
 """
-Startup script for AI Memory Bank with Frontend
-Launches the API server and serves the web interface
+Frontend launcher script for AI Memory Bank
+Starts the server and optionally opens the browser
 """
 
-import os
-import sys
-import subprocess
 import webbrowser
 import time
+import threading
+import sys
+import os
 from pathlib import Path
 
-def check_dependencies():
-    """Check if required dependencies are installed"""
+import uvicorn
+import click
+
+# Add the current directory to Python path
+sys.path.insert(0, str(Path(__file__).parent))
+
+import config
+
+def open_browser(url, delay=2):
+    """Open browser after a delay to ensure server is ready."""
+    time.sleep(delay)
     try:
-        import fastapi
-        import uvicorn
-        import sentence_transformers
-        import faiss
-        print("✅ All dependencies are installed")
-        return True
+        webbrowser.open(url)
+        print(f"🌐 Opened browser to {url}")
+    except Exception as e:
+        print(f"❌ Could not open browser: {e}")
+        print(f"Please manually open: {url}")
+
+@click.command()
+@click.option("--host", default=config.DEFAULT_HOST, help="Host to bind to")
+@click.option("--port", default=config.DEFAULT_PORT, help="Port to bind to")
+@click.option("--no-browser", is_flag=True, help="Don't open browser automatically")
+@click.option("--reload", is_flag=True, help="Enable auto-reload for development")
+def main(host, port, no_browser, reload):
+    """
+    Start the AI Memory Bank frontend server.
+    
+    This script will:
+    1. Start the FastAPI server
+    2. Automatically open your browser (unless --no-browser is specified)
+    3. Display helpful information about the running server
+    """
+    
+    # Check if dependencies are available
+    try:
+        import app
     except ImportError as e:
-        print(f"❌ Missing dependency: {e}")
-        print("Please run: pip install -r requirements.txt")
-        return False
-
-def check_frontend():
-    """Check if frontend files exist"""
-    frontend_dir = Path("frontend")
-    if not frontend_dir.exists():
-        print("❌ Frontend directory not found")
-        return False
+        print(f"❌ Error importing dependencies: {e}")
+        print("Please ensure all dependencies are installed:")
+        print("  pip install -r requirements.txt")
+        sys.exit(1)
     
-    required_files = ["index.html", "styles.css", "script.js"]
-    missing_files = []
+    # Construct the URL
+    url = f"http://{host}:{port}"
     
-    for file in required_files:
-        if not (frontend_dir / file).exists():
-            missing_files.append(file)
+    # Start browser in background thread (unless disabled)
+    if not no_browser:
+        browser_thread = threading.Thread(
+            target=open_browser, 
+            args=(url,), 
+            daemon=True
+        )
+        browser_thread.start()
     
-    if missing_files:
-        print(f"❌ Missing frontend files: {', '.join(missing_files)}")
-        return False
-    
-    print("✅ Frontend files found")
-    return True
-
-def start_server():
-    """Start the FastAPI server"""
-    print("🚀 Starting AI Memory Bank...")
-    print("=" * 50)
-    
-    # Check dependencies
-    if not check_dependencies():
-        return False
-    
-    # Check frontend
-    if not check_frontend():
-        print("⚠️  Frontend not found, starting API-only mode")
+    # Display startup information
+    print("🧠 AI Memory Bank - Starting Server")
+    print("=" * 40)
+    print(f"🌐 Server URL: {url}")
+    print(f"📖 API Docs: {url}/docs")
+    print(f"🎯 Host: {host}")
+    print(f"🔌 Port: {port}")
+    print("=" * 40)
+    print("Press Ctrl+C to stop the server")
+    print()
     
     # Start the server
     try:
-        print("🌐 Starting server on http://localhost:8000")
-        print("📖 API documentation: http://localhost:8000/docs")
-        print("🖥️  Web interface: http://localhost:8000")
-        print("=" * 50)
-        print("Press Ctrl+C to stop the server")
-        print("=" * 50)
-        
-        # Open browser after a short delay
-        def open_browser():
-            time.sleep(2)
-            try:
-                webbrowser.open("http://localhost:8000")
-            except:
-                pass
-        
-        import threading
-        browser_thread = threading.Thread(target=open_browser)
-        browser_thread.daemon = True
-        browser_thread.start()
-        
-        # Start the server
-        subprocess.run([
-            sys.executable, "-m", "uvicorn", 
-            "app:app", 
-            "--host", "0.0.0.0", 
-            "--port", "8000",
-            "--reload"
-        ])
-        
+        uvicorn.run(
+            "app:app",
+            host=host,
+            port=port,
+            reload=reload,
+            log_level="info"
+        )
     except KeyboardInterrupt:
-        print("\n👋 Server stopped")
-        return True
+        print("\n👋 Server stopped by user")
     except Exception as e:
-        print(f"❌ Failed to start server: {e}")
-        return False
-
-def main():
-    """Main function"""
-    print("🧠 AI Memory Bank - Frontend Launcher")
-    print("=" * 50)
-    
-    # Check if we're in the right directory
-    if not Path("app.py").exists():
-        print("❌ app.py not found. Please run this script from the AI Memory Bank directory.")
-        return 1
-    
-    success = start_server()
-    return 0 if success else 1
+        print(f"\n❌ Server error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    main() 

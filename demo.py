@@ -1,257 +1,187 @@
 #!/usr/bin/env python3
 """
-AI Memory Bank - Complete Demo
-Demonstrates all features including file processing, search, and web interface
+AI Memory Bank Demo Script
+Demonstrates the functionality of the AI Memory Bank system.
 """
 
 import sys
-import time
+import json
 from pathlib import Path
-import subprocess
-import webbrowser
-import threading
 
-def print_header():
-    print("🧠 AI Memory Bank - Complete Demo")
+# Add current directory to path
+sys.path.insert(0, str(Path(__file__).parent))
+
+def create_sample_files():
+    """Create sample files for demonstration."""
+    
+    sample_files = {
+        "sample_notes.md": """# AI and Machine Learning Notes
+
+## Deep Learning
+Deep learning is a subset of machine learning that uses neural networks with multiple layers. Key concepts include:
+
+- **Neural Networks**: Computational models inspired by biological neural networks
+- **Backpropagation**: Algorithm for training neural networks
+- **Gradient Descent**: Optimization algorithm for minimizing loss functions
+
+## Natural Language Processing
+NLP focuses on the interaction between computers and human language:
+
+- **Tokenization**: Breaking text into smaller units (words, sentences)
+- **Word Embeddings**: Dense vector representations of words
+- **Transformers**: Architecture that revolutionized NLP (BERT, GPT)
+
+## Computer Vision
+Computer vision enables machines to interpret visual information:
+
+- **Convolutional Neural Networks (CNNs)**: Specialized for image processing
+- **Object Detection**: Identifying and locating objects in images
+- **Image Segmentation**: Pixel-level classification of images
+""",
+        
+        "python_tips.txt": """Python Programming Tips and Tricks
+
+1. List Comprehensions
+   - More efficient than traditional loops
+   - Example: [x**2 for x in range(10)]
+
+2. F-strings for String Formatting
+   - Modern and readable string formatting
+   - Example: f"Hello, {name}!"
+
+3. Context Managers
+   - Automatic resource management
+   - Example: with open('file.txt') as f: content = f.read()
+
+4. Virtual Environments
+   - Isolate project dependencies
+   - Example: python -m venv myenv
+
+5. Type Hints
+   - Improve code readability and IDE support
+   - Example: def greet(name: str) -> str: return f"Hello, {name}"
+
+6. Decorators
+   - Modify function behavior without changing the function
+   - Common uses: logging, timing, authentication
+
+7. Lambda Functions
+   - Anonymous functions for simple operations
+   - Example: sorted(data, key=lambda x: x['age'])
+""",
+        
+        "project_ideas.md": """# Interesting Project Ideas
+
+## Web Applications
+1. **Personal Knowledge Base** - Search and organize your notes and documents
+2. **Habit Tracker** - Track daily habits with visualization
+3. **Recipe Manager** - Store and search cooking recipes
+4. **Book Recommendation System** - AI-powered book suggestions
+
+## Data Science Projects
+1. **Stock Price Predictor** - Predict stock prices using historical data
+2. **Sentiment Analysis Tool** - Analyze sentiment in social media posts
+3. **Weather Pattern Analysis** - Analyze climate data and trends
+4. **Customer Segmentation** - Group customers based on behavior
+
+## Automation Scripts
+1. **File Organizer** - Automatically organize downloads folder
+2. **Backup Manager** - Automated backup system for important files
+3. **Email Automation** - Send automated reports and reminders
+4. **System Monitor** - Monitor system resources and send alerts
+
+## Mobile Apps
+1. **Expense Tracker** - Track personal expenses and budgets
+2. **Language Learning** - Interactive language learning app
+3. **Fitness Tracker** - Track workouts and progress
+4. **Plant Care Reminder** - Remind users to water plants
+"""
+    }
+    
+    # Create uploads directory if it doesn't exist
+    uploads_dir = Path("uploads")
+    uploads_dir.mkdir(exist_ok=True)
+    
+    print("📁 Creating sample files...")
+    
+    for filename, content in sample_files.items():
+        file_path = uploads_dir / filename
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        print(f"✅ Created: {file_path}")
+    
+    return list(sample_files.keys())
+
+def demo_cli_functionality():
+    """Demonstrate CLI functionality."""
+    print("\n🔧 AI Memory Bank Demo")
     print("=" * 50)
-    print("This demo will show you the complete functionality of your AI Memory Bank")
-    print("=" * 50)
-
-def check_setup():
-    """Check if everything is set up correctly"""
-    print("🔍 Checking setup...")
-    
-    # Check if we're in the right directory
-    if not Path("app.py").exists():
-        print("❌ app.py not found. Please run this from the AI Memory Bank directory.")
-        return False
-    
-    # Check if frontend exists
-    if not Path("frontend/index.html").exists():
-        print("❌ Frontend not found. Please ensure frontend files are present.")
-        return False
-    
-    # Check if test file exists
-    if not Path("test_sample.txt").exists():
-        print("❌ Test file not found. Please ensure test_sample.txt is present.")
-        return False
-    
-    print("✅ Setup looks good!")
-    return True
-
-def demo_cli_operations():
-    """Demonstrate CLI operations"""
-    print("\n📟 CLI Operations Demo")
-    print("-" * 30)
-    
-    print("1. Adding test file to memory bank...")
-    result = subprocess.run([
-        sys.executable, "app.py", "add-file", "test_sample.txt"
-    ], capture_output=True, text=True)
-    
-    if result.returncode == 0:
-        print("✅ Test file added successfully")
-    else:
-        print(f"❌ Failed to add test file: {result.stderr}")
-        return False
-    
-    print("\n2. Searching for 'machine learning'...")
-    result = subprocess.run([
-        sys.executable, "app.py", "search", "machine learning", "--top-k", "3"
-    ], capture_output=True, text=True)
-    
-    if result.returncode == 0:
-        print("✅ Search completed successfully")
-        print("📄 Search results:")
-        print(result.stdout)
-    else:
-        print(f"❌ Search failed: {result.stderr}")
-        return False
-    
-    print("\n3. Getting statistics...")
-    result = subprocess.run([
-        sys.executable, "app.py", "stats"
-    ], capture_output=True, text=True)
-    
-    if result.returncode == 0:
-        print("✅ Statistics retrieved")
-        print("📊 Statistics:")
-        print(result.stdout)
-    else:
-        print(f"❌ Statistics failed: {result.stderr}")
-        return False
-    
-    return True
-
-def demo_web_interface():
-    """Demonstrate web interface"""
-    print("\n🌐 Web Interface Demo")
-    print("-" * 30)
-    
-    print("Starting web server...")
-    
-    # Start server in background
-    server_process = subprocess.Popen([
-        sys.executable, "-m", "uvicorn", "app:app", 
-        "--host", "127.0.0.1", "--port", "8000"
-    ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    
-    # Wait for server to start
-    time.sleep(3)
     
     try:
-        print("✅ Server started on http://localhost:8000")
-        print("🌐 Opening web interface in browser...")
+        # Import the main modules
+        from app import process_file
+        from utils.search import search_similar_chunks
+        from utils.store import get_database_stats
         
-        # Open browser
-        webbrowser.open("http://localhost:8000")
+        # Create sample files
+        sample_files = create_sample_files()
         
-        print("\n🎉 Web interface is now running!")
-        print("📖 You can:")
-        print("   - Upload files using drag & drop")
-        print("   - Search your knowledge base")
-        print("   - View statistics")
-        print("   - Add text content manually")
-        print("\n🔄 The interface will automatically update as you add more content")
+        print(f"\n📊 Processing {len(sample_files)} sample files...")
         
-        print("\n⏰ Web interface will run for 30 seconds...")
-        print("   (You can continue using it after this demo)")
+        # Process each sample file
+        for filename in sample_files:
+            file_path = Path("uploads") / filename
+            try:
+                result = process_file(str(file_path), copy_to_uploads=False)
+                print(f"✅ Processed {filename}: {result['chunk_count']} chunks created")
+            except Exception as e:
+                print(f"❌ Error processing {filename}: {e}")
         
-        time.sleep(30)
+        print("\n📈 Database Statistics:")
+        stats = get_database_stats()
+        print(f"  📄 Documents: {stats['total_documents']}")
+        print(f"  📝 Chunks: {stats['total_chunks']}")
+        print(f"  💾 DB Size: {stats['database_size_mb']:.2f} MB")
         
+        print("\n🔍 Demo Searches:")
+        
+        # Demo searches
+        demo_queries = [
+            "machine learning and neural networks",
+            "Python programming tips",
+            "web application projects",
+            "deep learning concepts"
+        ]
+        
+        for query in demo_queries:
+            print(f"\n🔎 Searching: '{query}'")
+            try:
+                results = search_similar_chunks(query, top_k=3)
+                if results:
+                    for i, result in enumerate(results, 1):
+                        score = result['score']
+                        text_preview = result['text'][:100] + "..." if len(result['text']) > 100 else result['text']
+                        file_path = result['document_info']['file_path']
+                        print(f"  {i}. Score: {score:.3f} | File: {Path(file_path).name}")
+                        print(f"     Preview: {text_preview}")
+                else:
+                    print("  No results found")
+            except Exception as e:
+                print(f"  ❌ Search error: {e}")
+        
+        print("\n✅ Demo completed successfully!")
+        print("\n💡 Try the web interface:")
+        print("   python start_frontend.py")
+        print("\n💡 Or use the CLI:")
+        print("   python app.py search 'your query here'")
+        print("   python app.py stats")
+        
+    except ImportError as e:
+        print(f"❌ Import error: {e}")
+        print("Please install dependencies first:")
+        print("  pip install -r requirements.txt")
     except Exception as e:
-        print(f"❌ Failed to start web interface: {e}")
-    finally:
-        # Stop server
-        server_process.terminate()
-        server_process.wait()
-        print("🛑 Server stopped")
-
-def demo_api_endpoints():
-    """Demonstrate API endpoints"""
-    print("\n🔌 API Endpoints Demo")
-    print("-" * 30)
-    
-    print("Starting server for API demo...")
-    
-    # Start server in background
-    server_process = subprocess.Popen([
-        sys.executable, "-m", "uvicorn", "app:app", 
-        "--host", "127.0.0.1", "--port", "8000"
-    ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    
-    time.sleep(3)
-    
-    try:
-        import requests
-        
-        print("✅ Server started")
-        base_url = "http://localhost:8000"
-        
-        print("\n1. Testing search endpoint...")
-        response = requests.post(f"{base_url}/search", json={
-            "query": "neural networks",
-            "top_k": 3
-        })
-        
-        if response.status_code == 200:
-            data = response.json()
-            print(f"✅ Search successful: {data['total_results']} results found")
-        else:
-            print(f"❌ Search failed: {response.status_code}")
-        
-        print("\n2. Testing statistics endpoint...")
-        response = requests.get(f"{base_url}/statistics")
-        
-        if response.status_code == 200:
-            data = response.json()
-            print(f"✅ Statistics retrieved: {data['statistics']['total_entries']} entries")
-        else:
-            print(f"❌ Statistics failed: {response.status_code}")
-        
-        print("\n3. Testing supported extensions endpoint...")
-        response = requests.get(f"{base_url}/supported-extensions")
-        
-        if response.status_code == 200:
-            data = response.json()
-            print(f"✅ Extensions retrieved: {len(data['supported_extensions'])} supported formats")
-        else:
-            print(f"❌ Extensions failed: {response.status_code}")
-        
-        print(f"\n📖 API documentation available at: {base_url}/docs")
-        
-    except ImportError:
-        print("⚠️  requests library not available, skipping API demo")
-    except Exception as e:
-        print(f"❌ API demo failed: {e}")
-    finally:
-        # Stop server
-        server_process.terminate()
-        server_process.wait()
-
-def show_next_steps():
-    """Show next steps for the user"""
-    print("\n🎯 Next Steps")
-    print("=" * 50)
-    print("Your AI Memory Bank is ready to use!")
-    print("\n📖 Quick Start:")
-    print("1. Start the web interface: python start_frontend.py")
-    print("2. Upload your documents using drag & drop")
-    print("3. Search your knowledge base")
-    print("4. Explore the API at http://localhost:8000/docs")
-    
-    print("\n🔧 CLI Commands:")
-    print("- Add files: python app.py add-file <file>")
-    print("- Search: python app.py search <query>")
-    print("- Statistics: python app.py stats")
-    print("- Clear data: python app.py clear")
-    
-    print("\n📚 Supported File Types:")
-    print("- PDF (.pdf)")
-    print("- Markdown (.md)")
-    print("- Excel (.xlsx, .xls)")
-    print("- Word (.docx, .doc)")
-    print("- PowerPoint (.pptx, .ppt)")
-    print("- Text (.txt)")
-    
-    print("\n🚀 Advanced Usage:")
-    print("- Process entire directories: python app.py add-dir <directory>")
-    print("- Custom search parameters: python app.py search <query> --top-k 10")
-    print("- API integration: Use the REST endpoints for automation")
-    
-    print("\n💡 Tips:")
-    print("- The embedding model downloads automatically on first use (~90MB)")
-    print("- Large files are automatically chunked for better search")
-    print("- All data is stored locally for privacy")
-    print("- Use the web interface for the best user experience")
-
-def main():
-    """Main demo function"""
-    print_header()
-    
-    if not check_setup():
-        return 1
-    
-    print("\n🎬 Starting demo...")
-    
-    # Demo CLI operations
-    if not demo_cli_operations():
-        print("❌ CLI demo failed")
-        return 1
-    
-    # Demo web interface
-    demo_web_interface()
-    
-    # Demo API endpoints
-    demo_api_endpoints()
-    
-    # Show next steps
-    show_next_steps()
-    
-    print("\n🎉 Demo completed successfully!")
-    print("Your AI Memory Bank is ready to use!")
-    
-    return 0
+        print(f"❌ Demo error: {e}")
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    demo_cli_functionality() 

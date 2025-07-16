@@ -1,483 +1,347 @@
 #!/usr/bin/env python3
 """
 AI Memory Bank - Main Application
-Provides both CLI and API interfaces for managing and searching your personal knowledge base
+Personal AI-powered memory bank for storing and retrieving knowledge.
 """
 
-import argparse
-import logging
+import os
 import sys
+import click
+import uvicorn
 from pathlib import Path
 from typing import List, Optional
-import uvicorn
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse, FileResponse
+
+# FastAPI imports
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import json
 
-# Import our modules
-from config import get_config, API_HOST, API_PORT, API_TITLE, API_DESCRIPTION, LOG_LEVEL, LOG_FORMAT
-from parser import parse_file, get_supported_extensions
+# Local imports
+import config
+from parser import get_parser
+from embedder.embedder import embedder
 from utils.file_utils import (
-    is_supported_file, validate_file_path, copy_file_to_uploads, 
-    scan_directory_for_files, get_uploads_directory_info
+    get_file_type, is_supported_file, copy_file_to_uploads,
+    get_files_in_directory, format_file_size
 )
-from utils.store import get_store
-from utils.search import get_search
-from embedder.embedder import get_embedder
-
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL),
-    format=LOG_FORMAT,
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('ai_memory_bank.log')
-    ]
+from utils.store import (
+    chunk_text, store_document, store_text_directly,
+    get_database_stats, clear_all_data
 )
+from utils.search import search_similar_chunks, search_documents
 
-logger = logging.getLogger(__name__)
-
-# FastAPI app
-app = FastAPI(
-    title=API_TITLE,
-    description=API_DESCRIPTION,
-    version="1.0.0"
-)
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your frontend domain
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Mount static files for frontend
-try:
-    app.mount("/static", StaticFiles(directory="frontend"), name="static")
-except:
-    pass  # Frontend directory might not exist
-
-# Pydantic models for API
+# API Models
 class SearchRequest(BaseModel):
     query: str
     top_k: Optional[int] = 5
-    similarity_threshold: Optional[float] = 0.3
 
-class TextStoreRequest(BaseModel):
+class StoreTextRequest(BaseModel):
     text: str
-    metadata: Optional[dict] = None
-
-class FileUploadResponse(BaseModel):
-    success: bool
-    message: str
-    file_path: Optional[str] = None
-    chunks_added: Optional[int] = None
 
 class SearchResponse(BaseModel):
-    success: bool
     results: List[dict]
     total_results: int
     query: str
 
-class StatisticsResponse(BaseModel):
-    success: bool
-    statistics: dict
+# Initialize FastAPI app
+app = FastAPI(
+    title=config.API_TITLE,
+    description=config.API_DESCRIPTION,
+    version=config.API_VERSION
+)
 
-# CLI Functions
-def add_file_cli(file_path: str, copy_to_uploads: bool = True) -> bool:
-    """Add a file to the memory bank via CLI"""
+# Mount static files for frontend
+app.mount("/static", StaticFiles(directory=str(config.FRONTEND_DIR)), name="static")
+
+# CLI Commands
+@click.group()
+def cli():
+    """AI Memory Bank - Personal knowledge management system."""
+    pass
+
+@cli.command("add-file")
+@click.argument("file_path", type=click.Path(exists=True))
+@click.option("--copy/--no-copy", default=True, help="Copy file to uploads directory")
+def add_file_cli(file_path: str, copy: bool):
+    """Add a single file to the memory bank."""
     try:
-        path = Path(file_path)
-        
-        if not validate_file_path(path):
-            logger.error(f"File not found or not accessible: {file_path}")
-            return False
-        
-        if not is_supported_file(path):
-            logger.error(f"Unsupported file type: {path.suffix}")
-            return False
-        
-        # Copy to uploads if requested
-        if copy_to_uploads:
-            path = copy_file_to_uploads(path)
-        
-        # Parse the file
-        logger.info(f"Parsing file: {path}")
-        parsed_content = parse_file(path)
-        
-        if not parsed_content:
-            logger.warning(f"No content extracted from {path}")
-            return False
-        
-        # Store the content
-        store = get_store()
-        success = store.store_file_content(path, parsed_content)
-        
-        if success:
-            logger.info(f"Successfully added {len(parsed_content)} chunks from {path}")
-        else:
-            logger.error(f"Failed to store content from {path}")
-        
-        return success
-        
+        result = process_file(file_path, copy_to_uploads=copy)
+        click.echo(f"✅ Successfully added: {file_path}")
+        click.echo(f"📄 Document ID: {result['document_id']}")
+        click.echo(f"📊 Chunks created: {result['chunk_count']}")
     except Exception as e:
-        logger.error(f"Error adding file {file_path}: {e}")
-        return False
+        click.echo(f"❌ Error processing file: {e}", err=True)
+        sys.exit(1)
 
-def add_directory_cli(directory_path: str, recursive: bool = True) -> int:
-    """Add all supported files from a directory via CLI"""
+@cli.command("add-dir")
+@click.argument("directory", type=click.Path(exists=True, file_okay=False))
+@click.option("--recursive/--no-recursive", default=True, help="Search recursively")
+@click.option("--copy/--no-copy", default=True, help="Copy files to uploads directory")
+def add_directory_cli(directory: str, recursive: bool, copy: bool):
+    """Add all supported files from a directory."""
     try:
-        directory = Path(directory_path)
-        
-        if not directory.exists() or not directory.is_dir():
-            logger.error(f"Directory not found: {directory_path}")
-            return 0
-        
-        # Scan for supported files
-        files = scan_directory_for_files(directory, recursive)
+        files = get_files_in_directory(directory, recursive)
         
         if not files:
-            logger.warning(f"No supported files found in {directory_path}")
-            return 0
-        
-        logger.info(f"Found {len(files)} supported files to process")
-        
-        # Process each file
-        success_count = 0
-        for file_path in files:
-            if add_file_cli(str(file_path)):
-                success_count += 1
-        
-        logger.info(f"Successfully processed {success_count}/{len(files)} files")
-        return success_count
-        
-    except Exception as e:
-        logger.error(f"Error processing directory {directory_path}: {e}")
-        return 0
-
-def search_cli(query: str, top_k: int = 5) -> None:
-    """Search the memory bank via CLI"""
-    try:
-        search = get_search()
-        results = search.search(query, top_k=top_k)
-        
-        if not results:
-            print(f"No results found for query: {query}")
+            click.echo("⚠️  No supported files found in directory")
             return
         
-        print(f"\nSearch results for: '{query}'")
-        print("=" * 50)
+        click.echo(f"📁 Found {len(files)} supported files")
         
-        for i, result in enumerate(results, 1):
-            print(f"\n{i}. Similarity: {result['similarity_score']:.3f}")
-            print(f"   File: {result['metadata']['file_path']}")
-            print(f"   Type: {result['metadata']['file_type']}")
-            print(f"   Content: {result['content'][:200]}...")
-            
-            # Show additional metadata if available
-            if 'chunk_index' in result['metadata']:
-                print(f"   Chunk: {result['metadata']['chunk_index'] + 1}/{result['metadata']['total_chunks']}")
+        with click.progressbar(files, label='Processing files') as bar:
+            success_count = 0
+            for file_path in bar:
+                try:
+                    process_file(file_path, copy_to_uploads=copy)
+                    success_count += 1
+                except Exception as e:
+                    click.echo(f"\n❌ Error processing {file_path}: {e}")
         
-        print(f"\nTotal results: {len(results)}")
+        click.echo(f"✅ Successfully processed {success_count} out of {len(files)} files")
         
     except Exception as e:
-        logger.error(f"Search error: {e}")
+        click.echo(f"❌ Error: {e}", err=True)
+        sys.exit(1)
 
-def statistics_cli() -> None:
-    """Show memory bank statistics via CLI"""
+@cli.command("search")
+@click.argument("query")
+@click.option("--top-k", default=5, help="Number of results to return")
+@click.option("--documents", is_flag=True, help="Search documents instead of chunks")
+def search_cli(query: str, top_k: int, documents: bool):
+    """Search the memory bank."""
     try:
-        store = get_store()
-        stats = store.get_statistics()
-        
-        print("\nAI Memory Bank Statistics")
-        print("=" * 30)
-        print(f"Total entries: {stats.get('total_entries', 0)}")
-        print(f"Total vectors: {stats.get('total_vectors', 0)}")
-        print(f"Unique files: {stats.get('unique_files', 0)}")
-        print(f"Total content size: {stats.get('total_content_length', 0):,} characters")
-        
-        if 'file_types' in stats:
-            print("\nFile types:")
-            for file_type, count in stats['file_types'].items():
-                print(f"  {file_type}: {count}")
-        
-        # Show uploads directory info
-        uploads_info = get_uploads_directory_info()
-        print(f"\nUploads directory: {uploads_info['path']}")
-        print(f"Files in uploads: {uploads_info['supported_files']}/{uploads_info['total_files']}")
-        print(f"Uploads size: {uploads_info['total_size_mb']:.2f} MB")
-        
-    except Exception as e:
-        logger.error(f"Error getting statistics: {e}")
-
-def clear_cli() -> None:
-    """Clear all data from the memory bank via CLI"""
-    try:
-        search = get_search()
-        success = search.clear()
-        
-        if success:
-            print("Memory bank cleared successfully")
+        if documents:
+            results = search_documents(query, top_k)
+            display_document_results(results, query)
         else:
-            print("Failed to clear memory bank")
+            results = search_similar_chunks(query, top_k)
+            display_chunk_results(results, query)
             
     except Exception as e:
-        logger.error(f"Error clearing memory bank: {e}")
+        click.echo(f"❌ Search error: {e}", err=True)
+        sys.exit(1)
 
-# API Endpoints
-@app.get("/")
-async def root():
-    """Root endpoint - serves frontend or API info"""
+@cli.command("stats")
+def stats_cli():
+    """Show memory bank statistics."""
     try:
-        # Try to serve the frontend
-        return FileResponse("frontend/index.html")
-    except:
-        # Fallback to API info
-        return {
-            "name": "AI Memory Bank",
-            "version": "1.0.0",
-            "description": "A personal AI-powered memory bank for storing and retrieving knowledge",
-            "endpoints": {
-                "upload": "/upload",
-                "search": "/search",
-                "statistics": "/statistics",
-                "clear": "/clear"
-            },
-            "frontend": "Visit /static/ to access the web interface"
-        }
+        stats = get_database_stats()
+        click.echo("📊 AI Memory Bank Statistics")
+        click.echo("=" * 30)
+        click.echo(f"📄 Total documents: {stats['total_documents']}")
+        click.echo(f"📝 Total chunks: {stats['total_chunks']}")
+        click.echo(f"💾 Database size: {stats['database_size_mb']:.2f} MB")
+        click.echo(f"🔍 Index size: {stats['index_size_mb']:.2f} MB")
+        click.echo(f"⏰ Last updated: {stats['last_updated']}")
+        
+    except Exception as e:
+        click.echo(f"❌ Error getting stats: {e}", err=True)
+        sys.exit(1)
 
-@app.post("/upload", response_model=FileUploadResponse)
+@cli.command("clear")
+@click.confirmation_option(prompt="Are you sure you want to clear all data?")
+def clear_cli():
+    """Clear all data from the memory bank."""
+    try:
+        clear_all_data()
+        click.echo("✅ All data cleared successfully!")
+    except Exception as e:
+        click.echo(f"❌ Error clearing data: {e}", err=True)
+        sys.exit(1)
+
+@cli.command("serve")
+@click.option("--host", default=config.DEFAULT_HOST, help="Host to bind to")
+@click.option("--port", default=config.DEFAULT_PORT, help="Port to bind to")
+@click.option("--reload", is_flag=True, help="Enable auto-reload for development")
+def serve_cli(host: str, port: int, reload: bool):
+    """Start the API server."""
+    click.echo(f"🚀 Starting AI Memory Bank server at http://{host}:{port}")
+    click.echo("📖 API documentation available at http://{host}:{port}/docs")
+    
+    uvicorn.run(
+        "app:app",
+        host=host,
+        port=port,
+        reload=reload,
+        log_level="info"
+    )
+
+# Core Functions
+def process_file(file_path: str, copy_to_uploads: bool = True) -> dict:
+    """
+    Process a file and add it to the memory bank.
+    
+    Args:
+        file_path: Path to the file
+        copy_to_uploads: Whether to copy file to uploads directory
+        
+    Returns:
+        Dictionary with processing results
+    """
+    if not is_supported_file(file_path):
+        raise ValueError(f"Unsupported file type: {file_path}")
+    
+    file_type = get_file_type(file_path)
+    if not file_type:
+        raise ValueError(f"Unable to determine file type for: {file_path}")
+    
+    parser = get_parser(file_type)
+    if not parser:
+        raise ValueError(f"No parser found for file type: {file_type}")
+    
+    # Parse the file
+    content = parser(file_path)
+    
+    if not content.strip():
+        raise ValueError("No content extracted from file")
+    
+    # Copy file to uploads if requested
+    if copy_to_uploads:
+        file_path = copy_file_to_uploads(file_path)
+    
+    # Chunk the content
+    chunks = chunk_text(content)
+    
+    # Generate embeddings
+    embeddings = embedder.embed_batch(chunks)
+    
+    # Store in database
+    doc_id = store_document(file_path, content, file_type, embeddings, chunks)
+    
+    return {
+        "document_id": doc_id,
+        "file_path": file_path,
+        "file_type": file_type,
+        "chunk_count": len(chunks),
+        "content_length": len(content)
+    }
+
+def display_chunk_results(results: List[dict], query: str):
+    """Display search results for chunks."""
+    if not results:
+        click.echo("❌ No results found")
+        return
+    
+    click.echo(f"🔍 Search results for: '{query}'")
+    click.echo("=" * 50)
+    
+    for i, result in enumerate(results, 1):
+        score = result['score']
+        text = result['text'][:200] + "..." if len(result['text']) > 200 else result['text']
+        doc_info = result['document_info']
+        
+        click.echo(f"\n{i}. Score: {score:.3f}")
+        click.echo(f"   📄 File: {doc_info['file_path']}")
+        click.echo(f"   📝 Text: {text}")
+
+def display_document_results(results: List[dict], query: str):
+    """Display search results for documents."""
+    if not results:
+        click.echo("❌ No results found")
+        return
+    
+    click.echo(f"🔍 Document search results for: '{query}'")
+    click.echo("=" * 50)
+    
+    for i, result in enumerate(results, 1):
+        max_score = result['max_score']
+        chunk_count = result['chunk_count']
+        best_chunk = result['best_chunk'][:200] + "..." if len(result['best_chunk']) > 200 else result['best_chunk']
+        doc_info = result['document_info']
+        
+        click.echo(f"\n{i}. Max Score: {max_score:.3f} ({chunk_count} chunks)")
+        click.echo(f"   📄 File: {doc_info['file_path']}")
+        click.echo(f"   📝 Best match: {best_chunk}")
+
+# API Routes
+@app.get("/", response_class=HTMLResponse)
+async def frontend():
+    """Serve the frontend HTML page."""
+    html_file = config.FRONTEND_DIR / "index.html"
+    if html_file.exists():
+        return FileResponse(html_file)
+    return HTMLResponse("<h1>AI Memory Bank</h1><p>Frontend not found</p>")
+
+@app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    """Upload and process a file"""
+    """Upload and process a file."""
     try:
         # Check file type
-        file_path = Path(file.filename)
-        if not is_supported_file(file_path):
+        if not is_supported_file(file.filename):
             raise HTTPException(
-                status_code=400, 
-                detail=f"Unsupported file type: {file_path.suffix}"
+                status_code=400,
+                detail=f"Unsupported file type. Supported: {list(config.SUPPORTED_EXTENSIONS.keys())}"
             )
         
         # Save uploaded file
-        uploads_dir = Path("uploads")
-        uploads_dir.mkdir(exist_ok=True)
-        
-        saved_path = uploads_dir / file.filename
-        with open(saved_path, "wb") as buffer:
+        temp_path = config.UPLOADS_DIR / file.filename
+        with open(temp_path, "wb") as buffer:
             content = await file.read()
             buffer.write(content)
         
-        # Parse and store the file
-        parsed_content = parse_file(saved_path)
+        # Process the file
+        result = process_file(str(temp_path), copy_to_uploads=False)
         
-        if not parsed_content:
-            raise HTTPException(
-                status_code=400,
-                detail="No content could be extracted from the file"
-            )
+        return {
+            "success": True,
+            "message": "File uploaded and processed successfully",
+            "document_id": result["document_id"],
+            "chunk_count": result["chunk_count"],
+            "file_size": len(content)
+        }
         
-        store = get_store()
-        success = store.store_file_content(saved_path, parsed_content)
-        
-        if not success:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to store file content"
-            )
-        
-        return FileUploadResponse(
-            success=True,
-            message=f"File uploaded and processed successfully",
-            file_path=str(saved_path),
-            chunks_added=len(parsed_content)
-        )
-        
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/search", response_model=SearchResponse)
-async def search_memory(request: SearchRequest):
-    """Search the memory bank"""
+async def search_api(request: SearchRequest):
+    """Search the memory bank."""
     try:
-        search = get_search()
-        results = search.search(
-            request.query,
-            top_k=request.top_k,
-            similarity_threshold=request.similarity_threshold
-        )
+        results = search_similar_chunks(request.query, request.top_k)
         
         return SearchResponse(
-            success=True,
             results=results,
             total_results=len(results),
             query=request.query
         )
         
     except Exception as e:
-        logger.error(f"Search error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/store-text")
-async def store_text(request: TextStoreRequest):
-    """Store raw text content"""
+async def store_text_api(request: StoreTextRequest):
+    """Store text directly without a file."""
     try:
-        store = get_store()
-        success = store.store_text_content(request.text, request.metadata)
+        if not request.text.strip():
+            raise HTTPException(status_code=400, detail="Text cannot be empty")
         
-        if not success:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to store text content"
-            )
+        # Chunk the text
+        chunks = chunk_text(request.text)
         
-        return {"success": True, "message": "Text stored successfully"}
+        # Generate embeddings
+        embeddings = embedder.embed_batch(chunks)
         
-    except HTTPException:
-        raise
+        # Store in database
+        doc_id = store_text_directly(request.text, embeddings, chunks)
+        
+        return {
+            "success": True,
+            "message": "Text stored successfully",
+            "document_id": doc_id,
+            "chunk_count": len(chunks)
+        }
+        
     except Exception as e:
-        logger.error(f"Store text error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/statistics", response_model=StatisticsResponse)
+@app.get("/statistics")
 async def get_statistics():
-    """Get memory bank statistics"""
+    """Get memory bank statistics."""
     try:
-        store = get_store()
-        stats = store.get_statistics()
-        
-        return StatisticsResponse(
-            success=True,
-            statistics=stats
-        )
-        
+        return get_database_stats()
     except Exception as e:
-        logger.error(f"Statistics error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/clear")
-async def clear_memory():
-    """Clear all data from the memory bank"""
-    try:
-        search = get_search()
-        success = search.clear()
-        
-        if not success:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to clear memory bank"
-            )
-        
-        return {"success": True, "message": "Memory bank cleared successfully"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Clear error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/supported-extensions")
-async def get_supported_extensions():
-    """Get list of supported file extensions"""
-    return {
-        "supported_extensions": list(get_supported_extensions())
-    }
-
-# CLI Main
-def main():
-    """Main CLI entry point"""
-    parser = argparse.ArgumentParser(
-        description="AI Memory Bank - Personal knowledge management system",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python app.py add-file document.pdf
-  python app.py add-dir /path/to/documents
-  python app.py search "machine learning"
-  python app.py stats
-  python app.py serve
-        """
-    )
-    
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
-    
-    # Add file command
-    add_file_parser = subparsers.add_parser('add-file', help='Add a single file')
-    add_file_parser.add_argument('file_path', help='Path to the file to add')
-    add_file_parser.add_argument('--no-copy', action='store_true', 
-                                help='Don\'t copy file to uploads directory')
-    
-    # Add directory command
-    add_dir_parser = subparsers.add_parser('add-dir', help='Add all files from a directory')
-    add_dir_parser.add_argument('directory_path', help='Path to the directory')
-    add_dir_parser.add_argument('--no-recursive', action='store_true',
-                               help='Don\'t scan subdirectories')
-    
-    # Search command
-    search_parser = subparsers.add_parser('search', help='Search the memory bank')
-    search_parser.add_argument('query', help='Search query')
-    search_parser.add_argument('--top-k', type=int, default=5,
-                              help='Number of results to return')
-    
-    # Statistics command
-    subparsers.add_parser('stats', help='Show memory bank statistics')
-    
-    # Clear command
-    subparsers.add_parser('clear', help='Clear all data from memory bank')
-    
-    # Serve command
-    serve_parser = subparsers.add_parser('serve', help='Start the API server')
-    serve_parser.add_argument('--host', default=API_HOST, help='Host to bind to')
-    serve_parser.add_argument('--port', type=int, default=API_PORT, help='Port to bind to')
-    serve_parser.add_argument('--reload', action='store_true', help='Enable auto-reload')
-    
-    args = parser.parse_args()
-    
-    if not args.command:
-        parser.print_help()
-        return
-    
-    try:
-        if args.command == 'add-file':
-            success = add_file_cli(args.file_path, not args.no_copy)
-            sys.exit(0 if success else 1)
-            
-        elif args.command == 'add-dir':
-            count = add_directory_cli(args.directory_path, not args.no_recursive)
-            print(f"Successfully processed {count} files")
-            
-        elif args.command == 'search':
-            search_cli(args.query, args.top_k)
-            
-        elif args.command == 'stats':
-            statistics_cli()
-            
-        elif args.command == 'clear':
-            clear_cli()
-            
-        elif args.command == 'serve':
-            print(f"Starting AI Memory Bank API server on {args.host}:{args.port}")
-            print("Press Ctrl+C to stop")
-            uvicorn.run(
-                "app:app",
-                host=args.host,
-                port=args.port,
-                reload=args.reload
-            )
-            
-    except KeyboardInterrupt:
-        print("\nOperation cancelled by user")
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        sys.exit(1)
 
 if __name__ == "__main__":
-    main() 
+    cli() 

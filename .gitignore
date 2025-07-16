@@ -22,20 +22,22 @@ wheels/
 MANIFEST
 
 # Virtual environments
-venv/
+.env
+.venv
 env/
+venv/
 ENV/
 env.bak/
 venv.bak/
 
-# IDE
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS
+# OS files
 .DS_Store
 .DS_Store?
 ._*
@@ -44,24 +46,11 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 
-# Project specific
+# AI Memory Bank specific
 memory/
-uploads/
 embedder/model_cache/
+uploads/
 *.log
-*.index
-backup_*.json
-
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# Temporary files
-*.tmp
-*.temp
-temp/
-tmp/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -69,7 +58,6 @@ tmp/
 # pytest
 .pytest_cache/
 .coverage
-htmlcov/
 
 # mypy
 .mypy_cache/

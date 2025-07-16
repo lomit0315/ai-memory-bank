@@ -1,336 +1,194 @@
-"""
-Search utilities for AI Memory Bank
-Handles FAISS vector search and similarity matching
-"""
-
-import logging
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple
-import json
-from pathlib import Path
+from typing import List, Dict, Any, Tuple, Optional
 import faiss
-from config import DEFAULT_TOP_K, SIMILARITY_THRESHOLD, EMBEDDING_DIMENSION, DB_FILE
-from embedder.embedder import get_embedder
+import config
+from utils.store import load_database, load_faiss_index
+from embedder.embedder import embedder
 
-logger = logging.getLogger(__name__)
+def search_similar_chunks(
+    query: str,
+    top_k: Optional[int] = None,
+    similarity_threshold: Optional[float] = None
+) -> List[Dict[str, Any]]:
+    """
+    Search for similar chunks using FAISS.
+    
+    Args:
+        query: Search query
+        top_k: Number of results to return
+        similarity_threshold: Minimum similarity score
+        
+    Returns:
+        List of search results with chunk data and scores
+    """
+    if top_k is None:
+        top_k = config.DEFAULT_TOP_K
+    if similarity_threshold is None:
+        similarity_threshold = config.MIN_SIMILARITY_THRESHOLD
+    
+    # Load database and index
+    database = load_database()
+    index = load_faiss_index()
+    
+    if index is None or index.ntotal == 0:
+        return []
+    
+    # Generate query embedding
+    query_embedding = embedder.embed_text(query)
+    
+    # Normalize for cosine similarity
+    query_embedding = query_embedding / np.linalg.norm(query_embedding)
+    
+    # Search in FAISS index
+    scores, indices = index.search(query_embedding.reshape(1, -1), top_k * 2)  # Get more results to filter
+    
+    results = []
+    chunk_ids = list(database["chunks"].keys())
+    
+    for score, idx in zip(scores[0], indices[0]):
+        if idx >= len(chunk_ids) or score < similarity_threshold:
+            continue
+            
+        chunk_id = chunk_ids[idx]
+        chunk_data = database["chunks"][chunk_id]
+        document_data = database["documents"][chunk_data["document_id"]]
+        
+        result = {
+            "chunk_id": chunk_id,
+            "document_id": chunk_data["document_id"],
+            "text": chunk_data["text"],
+            "score": float(score),
+            "document_info": {
+                "file_path": document_data["file_path"],
+                "file_type": document_data["file_type"],
+                "created_at": document_data["created_at"]
+            },
+            "chunk_index": chunk_data["chunk_index"]
+        }
+        
+        results.append(result)
+        
+        if len(results) >= top_k:
+            break
+    
+    return results
 
-class MemorySearch:
-    """FAISS-based search for the memory bank"""
+def search_documents(query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
+    """
+    Search documents and aggregate chunk scores.
     
-    def __init__(self, db_file: Optional[Path] = None, index_file: Optional[Path] = None):
-        """
-        Initialize the search system
+    Args:
+        query: Search query
+        top_k: Number of documents to return
         
-        Args:
-            db_file: Path to the database JSON file
-            index_file: Path to the FAISS index file
-        """
-        self.db_file = db_file or DB_FILE
-        self.index_file = index_file or self.db_file.parent / "faiss.index"
-        self.embedder = get_embedder()
-        self.index = None
-        self.data = []
-        self.is_loaded = False
-        
-        self._load_data()
-        self._load_index()
+    Returns:
+        List of document results with aggregated scores
+    """
+    if top_k is None:
+        top_k = config.DEFAULT_TOP_K
     
-    def _load_data(self):
-        """Load data from the database file"""
-        try:
-            if self.db_file.exists():
-                with open(self.db_file, 'r', encoding='utf-8') as f:
-                    self.data = json.load(f)
-                logger.info(f"Loaded {len(self.data)} entries from database")
-            else:
-                logger.info("Database file not found, starting with empty database")
-                self.data = []
-        except Exception as e:
-            logger.error(f"Failed to load database: {e}")
-            self.data = []
+    chunk_results = search_similar_chunks(query, top_k * 3)  # Get more chunks
     
-    def _load_index(self):
-        """Load or create the FAISS index"""
-        try:
-            if self.index_file.exists() and len(self.data) > 0:
-                # Load existing index
-                self.index = faiss.read_index(str(self.index_file))
-                logger.info(f"Loaded FAISS index with {self.index.ntotal} vectors")
-            else:
-                # Create new index
-                dimension = self.embedder.get_embedding_dimension()
-                self.index = faiss.IndexFlatIP(dimension)  # Inner product for cosine similarity
-                logger.info(f"Created new FAISS index with dimension {dimension}")
-            
-            self.is_loaded = True
-            
-        except Exception as e:
-            logger.error(f"Failed to load FAISS index: {e}")
-            # Create a new index as fallback
-            dimension = self.embedder.get_embedding_dimension()
-            self.index = faiss.IndexFlatIP(dimension)
-            self.is_loaded = True
-    
-    def _save_index(self):
-        """Save the FAISS index to disk"""
-        try:
-            if self.index is not None:
-                faiss.write_index(self.index, str(self.index_file))
-                logger.debug("FAISS index saved")
-        except Exception as e:
-            logger.error(f"Failed to save FAISS index: {e}")
-    
-    def _save_data(self):
-        """Save data to the database file"""
-        try:
-            self.db_file.parent.mkdir(exist_ok=True)
-            with open(self.db_file, 'w', encoding='utf-8') as f:
-                json.dump(self.data, f, indent=2, ensure_ascii=False)
-            logger.debug("Database saved")
-        except Exception as e:
-            logger.error(f"Failed to save database: {e}")
-    
-    def add_entries(self, entries: List[Dict[str, Any]]) -> bool:
-        """
-        Add new entries to the memory bank
+    # Aggregate scores by document
+    document_scores = {}
+    for result in chunk_results:
+        doc_id = result["document_id"]
+        score = result["score"]
         
-        Args:
-            entries: List of entry dictionaries with 'content' and 'metadata' keys
-        
-        Returns:
-            True if successful, False otherwise
-        """
-        if not self.is_loaded:
-            logger.error("Search system not loaded")
-            return False
-        
-        try:
-            # Extract content for embedding
-            contents = [entry['content'] for entry in entries if entry.get('content')]
-            
-            if not contents:
-                logger.warning("No valid content found in entries")
-                return False
-            
-            # Generate embeddings
-            embeddings = self.embedder.encode(contents)
-            
-            if len(embeddings) == 0:
-                logger.error("Failed to generate embeddings")
-                return False
-            
-            # Add to FAISS index
-            self.index.add(embeddings.astype('float32'))
-            
-            # Add to data
-            self.data.extend(entries)
-            
-            # Save both index and data
-            self._save_index()
-            self._save_data()
-            
-            logger.info(f"Added {len(entries)} entries to memory bank")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to add entries: {e}")
-            return False
-    
-    def search(self, query: str, top_k: Optional[int] = None, 
-               similarity_threshold: Optional[float] = None) -> List[Dict[str, Any]]:
-        """
-        Search for similar content
-        
-        Args:
-            query: Search query text
-            top_k: Number of results to return
-            similarity_threshold: Minimum similarity score
-        
-        Returns:
-            List of search results with content, metadata, and similarity score
-        """
-        if not self.is_loaded or self.index is None or len(self.data) == 0:
-            logger.warning("Search system not ready or no data available")
-            return []
-        
-        top_k = top_k or DEFAULT_TOP_K
-        similarity_threshold = similarity_threshold or SIMILARITY_THRESHOLD
-        
-        try:
-            # Generate query embedding
-            query_embedding = self.embedder.encode_single(query)
-            
-            if query_embedding is None or len(query_embedding) == 0:
-                logger.error("Failed to generate query embedding")
-                return []
-            
-            # Search the index
-            query_embedding = query_embedding.reshape(1, -1).astype('float32')
-            similarities, indices = self.index.search(query_embedding, min(top_k, len(self.data)))
-            
-            # Format results
-            results = []
-            for i, (similarity, idx) in enumerate(zip(similarities[0], indices[0])):
-                if idx < len(self.data) and similarity >= similarity_threshold:
-                    result = {
-                        "content": self.data[idx]["content"],
-                        "metadata": self.data[idx]["metadata"],
-                        "similarity_score": float(similarity),
-                        "rank": i + 1
-                    }
-                    results.append(result)
-            
-            logger.info(f"Search returned {len(results)} results for query: {query[:50]}...")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Search failed: {e}")
-            return []
-    
-    def batch_search(self, queries: List[str], top_k: Optional[int] = None) -> List[List[Dict[str, Any]]]:
-        """
-        Perform batch search for multiple queries
-        
-        Args:
-            queries: List of search queries
-            top_k: Number of results per query
-        
-        Returns:
-            List of search result lists
-        """
-        if not queries:
-            return []
-        
-        results = []
-        for query in queries:
-            query_results = self.search(query, top_k=top_k)
-            results.append(query_results)
-        
-        return results
-    
-    def get_statistics(self) -> Dict[str, Any]:
-        """Get statistics about the memory bank"""
-        try:
-            total_entries = len(self.data)
-            total_vectors = self.index.ntotal if self.index else 0
-            
-            # Count by file type
-            file_types = {}
-            for entry in self.data:
-                file_type = entry.get("metadata", {}).get("file_type", "unknown")
-                file_types[file_type] = file_types.get(file_type, 0) + 1
-            
-            # Calculate total content size
-            total_content_size = sum(len(entry.get("content", "")) for entry in self.data)
-            
-            return {
-                "total_entries": total_entries,
-                "total_vectors": total_vectors,
-                "total_content_size": total_content_size,
-                "file_types": file_types,
-                "index_dimension": self.index.d if self.index else 0,
-                "is_loaded": self.is_loaded
+        if doc_id not in document_scores:
+            document_scores[doc_id] = {
+                "max_score": score,
+                "avg_score": score,
+                "total_score": score,
+                "chunk_count": 1,
+                "document_info": result["document_info"],
+                "best_chunk": result["text"]
             }
+        else:
+            doc_score = document_scores[doc_id]
+            doc_score["max_score"] = max(doc_score["max_score"], score)
+            doc_score["total_score"] += score
+            doc_score["chunk_count"] += 1
+            doc_score["avg_score"] = doc_score["total_score"] / doc_score["chunk_count"]
             
-        except Exception as e:
-            logger.error(f"Failed to get statistics: {e}")
-            return {"error": str(e)}
+            # Keep the best chunk text
+            if score > document_scores[doc_id]["max_score"]:
+                document_scores[doc_id]["best_chunk"] = result["text"]
     
-    def clear(self) -> bool:
-        """Clear all data from the memory bank"""
-        try:
-            # Clear data
-            self.data = []
-            
-            # Recreate index
-            dimension = self.embedder.get_embedding_dimension()
-            self.index = faiss.IndexFlatIP(dimension)
-            
-            # Save empty state
-            self._save_index()
-            self._save_data()
-            
-            logger.info("Memory bank cleared")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to clear memory bank: {e}")
-            return False
+    # Sort by max score and return top_k
+    sorted_docs = sorted(
+        document_scores.items(),
+        key=lambda x: x[1]["max_score"],
+        reverse=True
+    )[:top_k]
     
-    def remove_entries_by_file(self, file_path: str) -> int:
-        """
-        Remove all entries from a specific file
+    results = []
+    for doc_id, doc_data in sorted_docs:
+        result = {
+            "document_id": doc_id,
+            "max_score": doc_data["max_score"],
+            "avg_score": doc_data["avg_score"],
+            "chunk_count": doc_data["chunk_count"],
+            "document_info": doc_data["document_info"],
+            "best_chunk": doc_data["best_chunk"]
+        }
+        results.append(result)
+    
+    return results
+
+def get_document_chunks(document_id: str) -> List[Dict[str, Any]]:
+    """
+    Get all chunks for a specific document.
+    
+    Args:
+        document_id: Document ID
         
-        Args:
-            file_path: Path of the file to remove
-        
-        Returns:
-            Number of entries removed
-        """
-        try:
-            # Find entries to remove
-            indices_to_remove = []
-            for i, entry in enumerate(self.data):
-                if entry.get("metadata", {}).get("file_path") == file_path:
-                    indices_to_remove.append(i)
-            
-            if not indices_to_remove:
-                logger.info(f"No entries found for file: {file_path}")
-                return 0
-            
-            # Remove entries (in reverse order to maintain indices)
-            for i in reversed(indices_to_remove):
-                del self.data[i]
-            
-            # Rebuild index
-            self._rebuild_index()
-            
-            logger.info(f"Removed {len(indices_to_remove)} entries for file: {file_path}")
-            return len(indices_to_remove)
-            
-        except Exception as e:
-            logger.error(f"Failed to remove entries for file {file_path}: {e}")
-            return 0
+    Returns:
+        List of chunks for the document
+    """
+    database = load_database()
     
-    def _rebuild_index(self):
-        """Rebuild the FAISS index from current data"""
-        try:
-            # Extract content for embedding
-            contents = [entry['content'] for entry in self.data if entry.get('content')]
-            
-            if not contents:
-                # Create empty index
-                dimension = self.embedder.get_embedding_dimension()
-                self.index = faiss.IndexFlatIP(dimension)
-            else:
-                # Generate embeddings for all content
-                embeddings = self.embedder.encode(contents)
-                
-                # Create new index
-                dimension = embeddings.shape[1]
-                self.index = faiss.IndexFlatIP(dimension)
-                self.index.add(embeddings.astype('float32'))
-            
-            # Save the rebuilt index
-            self._save_index()
-            self._save_data()
-            
-            logger.info(f"Rebuilt FAISS index with {len(contents)} vectors")
-            
-        except Exception as e:
-            logger.error(f"Failed to rebuild index: {e}")
+    chunks = []
+    for chunk_id, chunk_data in database["chunks"].items():
+        if chunk_data["document_id"] == document_id:
+            chunks.append(chunk_data)
+    
+    # Sort by chunk index
+    chunks.sort(key=lambda x: x["chunk_index"])
+    
+    return chunks
 
-# Global search instance
-_search_instance = None
-
-def get_search() -> MemorySearch:
-    """Get or create the global search instance"""
-    global _search_instance
-    if _search_instance is None:
-        _search_instance = MemorySearch()
-    return _search_instance
-
-def reset_search():
-    """Reset the global search instance (useful for testing)"""
-    global _search_instance
-    _search_instance = None 
+def get_chunk_context(chunk_id: str, context_size: int = 2) -> Dict[str, Any]:
+    """
+    Get a chunk with surrounding context chunks.
+    
+    Args:
+        chunk_id: Chunk ID
+        context_size: Number of chunks before and after to include
+        
+    Returns:
+        Dictionary with chunk and context
+    """
+    database = load_database()
+    
+    if chunk_id not in database["chunks"]:
+        return {}
+    
+    chunk_data = database["chunks"][chunk_id]
+    document_id = chunk_data["document_id"]
+    chunk_index = chunk_data["chunk_index"]
+    
+    # Get all chunks for the document
+    document_chunks = get_document_chunks(document_id)
+    
+    # Find context chunks
+    start_idx = max(0, chunk_index - context_size)
+    end_idx = min(len(document_chunks), chunk_index + context_size + 1)
+    
+    context_chunks = document_chunks[start_idx:end_idx]
+    
+    return {
+        "target_chunk": chunk_data,
+        "context_chunks": context_chunks,
+        "document_info": database["documents"][document_id]
+    } 

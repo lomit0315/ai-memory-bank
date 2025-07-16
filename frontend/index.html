@@ -4,171 +4,137 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Memory Bank</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="/static/styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <header class="header">
             <div class="header-content">
-                <div class="logo">
-                    <i class="fas fa-brain"></i>
-                    <h1>AI Memory Bank</h1>
-                </div>
-                <div class="header-actions">
-                    <button id="statsBtn" class="btn btn-secondary">
-                        <i class="fas fa-chart-bar"></i>
-                        Statistics
-                    </button>
-                    <button id="clearBtn" class="btn btn-danger">
-                        <i class="fas fa-trash"></i>
-                        Clear All
-                    </button>
-                </div>
+                <h1><i class="fas fa-brain"></i> AI Memory Bank</h1>
+                <p>Your personal AI-powered knowledge management system</p>
             </div>
         </header>
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Upload Section -->
-            <section class="upload-section">
-                <div class="section-header">
-                    <h2><i class="fas fa-upload"></i> Upload Documents</h2>
-                    <p>Add your documents to the memory bank for semantic search</p>
-                </div>
-                
-                <div class="upload-area" id="uploadArea">
-                    <div class="upload-content">
-                        <i class="fas fa-cloud-upload-alt"></i>
-                        <h3>Drag & Drop Files Here</h3>
-                        <p>or click to browse</p>
-                        <p class="supported-formats">
-                            Supported: PDF, Markdown, Excel, Word, PowerPoint, Text
-                        </p>
-                    </div>
-                    <input type="file" id="fileInput" multiple accept=".pdf,.md,.xlsx,.xls,.docx,.doc,.pptx,.ppt,.txt" style="display: none;">
-                </div>
-
-                <div class="upload-progress" id="uploadProgress" style="display: none;">
-                    <div class="progress-header">
-                        <h4>Uploading Files...</h4>
-                        <span id="progressText">0%</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progressFill"></div>
-                    </div>
-                    <div id="uploadStatus"></div>
-                </div>
-
-                <div class="uploaded-files" id="uploadedFiles">
-                    <!-- Uploaded files will be displayed here -->
-                </div>
-            </section>
-
             <!-- Search Section -->
             <section class="search-section">
-                <div class="section-header">
-                    <h2><i class="fas fa-search"></i> Search Knowledge Base</h2>
-                    <p>Find relevant information across all your documents</p>
+                <div class="search-container">
+                    <h2><i class="fas fa-search"></i> Search Knowledge</h2>
+                    <div class="search-form">
+                        <div class="search-input-container">
+                            <input type="text" id="searchInput" placeholder="Ask me anything..." autocomplete="off">
+                            <button id="searchBtn" class="search-btn">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                        <div class="search-options">
+                            <label>
+                                <input type="number" id="topK" value="5" min="1" max="20">
+                                results
+                            </label>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="search-container">
-                    <div class="search-input-group">
-                        <input type="text" id="searchInput" placeholder="Enter your search query..." class="search-input">
-                        <button id="searchBtn" class="btn btn-primary">
-                            <i class="fas fa-search"></i>
-                            Search
+                <!-- Search Results -->
+                <div id="searchResults" class="search-results"></div>
+            </section>
+
+            <!-- Upload Section -->
+            <section class="upload-section">
+                <div class="upload-container">
+                    <h2><i class="fas fa-cloud-upload-alt"></i> Add Knowledge</h2>
+                    
+                    <!-- File Upload -->
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">
+                            <i class="fas fa-file-upload"></i>
+                        </div>
+                        <div class="upload-text">
+                            <h3>Drop files here or click to browse</h3>
+                            <p>Supported: PDF, Markdown, Word, Excel, PowerPoint, Text</p>
+                        </div>
+                        <input type="file" id="fileInput" multiple accept=".pdf,.md,.markdown,.txt,.docx,.doc,.xlsx,.xls,.pptx,.ppt">
+                    </div>
+
+                    <!-- Text Input -->
+                    <div class="text-input-section">
+                        <h3><i class="fas fa-keyboard"></i> Or add text directly</h3>
+                        <textarea id="textInput" placeholder="Enter your text here..." rows="6"></textarea>
+                        <button id="storeTextBtn" class="store-text-btn">
+                            <i class="fas fa-save"></i> Store Text
                         </button>
                     </div>
-                    
-                    <div class="search-options">
-                        <div class="option-group">
-                            <label for="topK">Results:</label>
-                            <select id="topK" class="select-input">
-                                <option value="3">3 results</option>
-                                <option value="5" selected>5 results</option>
-                                <option value="10">10 results</option>
-                                <option value="20">20 results</option>
-                            </select>
-                        </div>
-                        <div class="option-group">
-                            <label for="threshold">Min. Similarity:</label>
-                            <select id="threshold" class="select-input">
-                                <option value="0.1">0.1 (Very Low)</option>
-                                <option value="0.2">0.2 (Low)</option>
-                                <option value="0.3" selected>0.3 (Medium)</option>
-                                <option value="0.5">0.5 (High)</option>
-                                <option value="0.7">0.7 (Very High)</option>
-                            </select>
-                        </div>
-                    </div>
                 </div>
 
-                <div class="search-results" id="searchResults">
-                    <!-- Search results will be displayed here -->
+                <!-- Upload Progress -->
+                <div id="uploadProgress" class="upload-progress hidden">
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                    <div class="progress-text">Uploading and processing...</div>
                 </div>
             </section>
 
-            <!-- Quick Actions -->
-            <section class="quick-actions">
-                <div class="section-header">
-                    <h2><i class="fas fa-bolt"></i> Quick Actions</h2>
-                </div>
-                
-                <div class="action-grid">
-                    <button class="action-card" id="addTextBtn">
-                        <i class="fas fa-edit"></i>
-                        <h3>Add Text</h3>
-                        <p>Manually add text content</p>
-                    </button>
-                    
-                    <button class="action-card" id="exportBtn">
-                        <i class="fas fa-download"></i>
-                        <h3>Export Data</h3>
-                        <p>Download your knowledge base</p>
-                    </button>
-                    
-                    <button class="action-card" id="importBtn">
-                        <i class="fas fa-upload"></i>
-                        <h3>Import Data</h3>
-                        <p>Restore from backup</p>
-                    </button>
-                    
-                    <button class="action-card" id="refreshBtn">
-                        <i class="fas fa-sync-alt"></i>
-                        <h3>Refresh</h3>
-                        <p>Reload current data</p>
-                    </button>
+            <!-- Statistics Section -->
+            <section class="stats-section">
+                <div class="stats-container">
+                    <h2><i class="fas fa-chart-bar"></i> Statistics</h2>
+                    <div class="stats-grid" id="statsGrid">
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-file-alt"></i></div>
+                            <div class="stat-content">
+                                <div class="stat-number" id="totalDocs">-</div>
+                                <div class="stat-label">Documents</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-puzzle-piece"></i></div>
+                            <div class="stat-content">
+                                <div class="stat-number" id="totalChunks">-</div>
+                                <div class="stat-label">Chunks</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-database"></i></div>
+                            <div class="stat-content">
+                                <div class="stat-number" id="dbSize">-</div>
+                                <div class="stat-label">DB Size</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                            <div class="stat-content">
+                                <div class="stat-number" id="lastUpdated">-</div>
+                                <div class="stat-label">Last Updated</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>
 
-        <!-- Modals -->
-        <div id="modalOverlay" class="modal-overlay" style="display: none;">
-            <div class="modal">
-                <div class="modal-header">
-                    <h3 id="modalTitle">Modal Title</h3>
-                    <button class="modal-close" id="modalClose">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-                <div class="modal-content" id="modalContent">
-                    <!-- Modal content will be inserted here -->
-                </div>
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="loading-overlay hidden">
+            <div class="loading-spinner">
+                <i class="fas fa-brain fa-spin"></i>
+                <p>Processing...</p>
             </div>
         </div>
 
-        <!-- Loading Overlay -->
-        <div id="loadingOverlay" class="loading-overlay" style="display: none;">
-            <div class="loading-content">
-                <div class="spinner"></div>
-                <p id="loadingText">Processing...</p>
+        <!-- Notification Toast -->
+        <div id="notification" class="notification hidden">
+            <div class="notification-content">
+                <i class="notification-icon"></i>
+                <span class="notification-message"></span>
             </div>
+            <button class="notification-close">&times;</button>
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script src="/static/script.js"></script>
 </body>
 </html> 
