@@ -20,4 +20,10 @@ aiofiles
 
 # Development dependencies
 pytest  
+pytest-cov
+pytest-asyncio
 black
+flake8
+
+# Additional dependencies for improvements
+httpx

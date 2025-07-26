@@ -36,6 +36,12 @@ class SearchRequest(BaseModel):
     query: str
     top_k: Optional[int] = 5
 
+class QuestionRequest(BaseModel):
+    question: str
+    top_k: Optional[int] = 5
+    model: Optional[str] = None
+    use_ollama: Optional[bool] = True
+
 class StoreTextRequest(BaseModel):
     text: str
 
@@ -121,6 +127,102 @@ def search_cli(query: str, top_k: int, documents: bool):
     except Exception as e:
         click.echo(f"❌ Search error: {e}", err=True)
         sys.exit(1)
+
+@cli.command("ask")
+@click.argument("question")
+@click.option("--model", default=None, help="Ollama model to use")
+@click.option("--top-k", default=5, help="Number of search results to use as context")
+@click.option("--no-ollama", is_flag=True, help="Disable Ollama, use search results only")
+def ask_cli(question: str, model: str, top_k: int, no_ollama: bool):
+    """Ask an AI question using the knowledge base."""
+    import asyncio
+    
+    async def run_ask():
+        try:
+            from utils.qa_system import qa_system
+            
+            click.echo(f"🤖 Asking: '{question}'")
+            if model:
+                click.echo(f"📱 Using model: {model}")
+            
+            result = await qa_system.answer_question(
+                question=question,
+                top_k=top_k,
+                model=model,
+                use_ollama=not no_ollama
+            )
+            
+            click.echo("\n" + "="*50)
+            click.echo(f"❓ Question: {question}")
+            click.echo("="*50)
+            click.echo(f"🤖 Answer:\n{result['answer']}")
+            click.echo("="*50)
+            
+            # Display metadata
+            method = result['method']
+            response_time = result['response_time']
+            click.echo(f"📊 Method: {method} | Time: {response_time:.2f}s")
+            
+            # Display sources
+            if result['sources']:
+                click.echo(f"📚 Sources:")
+                for source in result['sources']:
+                    click.echo(f"   • {source}")
+            
+            # Display search results if no AI answer
+            if method == "search_only" and result.get('search_results'):
+                click.echo(f"\n🔍 Related search results:")
+                for i, res in enumerate(result['search_results'][:3], 1):
+                    text_preview = res['text'][:100] + "..." if len(res['text']) > 100 else res['text']
+                    click.echo(f"   {i}. {text_preview}")
+                    click.echo(f"      From: {res['document_info']['file_path']}")
+            
+        except Exception as e:
+            click.echo(f"❌ Ask error: {e}", err=True)
+            sys.exit(1)
+    
+    try:
+        asyncio.run(run_ask())
+    except Exception as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        sys.exit(1)
+
+@cli.command("ollama-status")
+def ollama_status_cli():
+    """Check Ollama service status."""
+    import asyncio
+    
+    async def check_status():
+        try:
+            from utils.qa_system import qa_system
+            status = await qa_system.check_ollama_status()
+            
+            click.echo("🤖 Ollama Status")
+            click.echo("=" * 30)
+            click.echo(f"Enabled: {'✅' if status['enabled'] else '❌'}")
+            click.echo(f"Available: {'✅' if status.get('available') else '❌'}")
+            
+            if status.get('available'):
+                click.echo(f"Base URL: {status.get('base_url')}")
+                click.echo(f"Default Model: {status.get('default_model')}")
+                
+                models = status.get('available_models', [])
+                if models:
+                    click.echo(f"Available Models ({len(models)}):")
+                    for model in models:
+                        click.echo(f"  • {model}")
+                else:
+                    click.echo("No models found")
+            else:
+                click.echo("💡 Tip: Start Ollama with 'ollama serve'")
+                
+        except Exception as e:
+            click.echo(f"❌ Error: {e}", err=True)
+    
+    try:
+        asyncio.run(check_status())
+    except Exception as e:
+        click.echo(f"❌ Error: {e}", err=True)
 
 @cli.command("stats")
 def stats_cli():
@@ -340,6 +442,51 @@ async def get_statistics():
     """Get memory bank statistics."""
     try:
         return get_database_stats()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ask")
+async def ask_question(request: QuestionRequest):
+    """Ask a question using the knowledge base and Ollama."""
+    try:
+        from utils.qa_system import qa_system
+        
+        result = await qa_system.answer_question(
+            question=request.question,
+            top_k=request.top_k,
+            model=request.model,
+            use_ollama=request.use_ollama
+        )
+        
+        return {
+            "success": True,
+            "answer": result["answer"],
+            "question": result["question"],
+            "sources": result["sources"],
+            "method": result["method"],
+            "response_time": result["response_time"],
+            "metadata": result.get("ollama_metadata", {})
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/ollama/status")
+async def get_ollama_status():
+    """Get Ollama service status and available models."""
+    try:
+        from utils.qa_system import qa_system
+        return await qa_system.check_ollama_status()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/ollama/models")
+async def get_ollama_models():
+    """Get list of available Ollama models."""
+    try:
+        from utils.qa_system import qa_system
+        models = await qa_system.get_available_models()
+        return {"models": models}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

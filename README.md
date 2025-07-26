@@ -1,17 +1,35 @@
 # AI Memory Bank
 
-A personal AI-powered memory bank for storing and retrieving knowledge from various file formats. This system uses semantic search to help you find relevant information across your documents, notes, and files.
+A personal AI-powered memory bank for storing and retrieving knowledge from various file formats. This system uses semantic search and **local AI models** to help you find relevant information and get intelligent answers from your documents, notes, and files.
+
+## 🌟 NEW: AI Question Answering with Ollama
+
+**Transform your knowledge base into an intelligent AI assistant!**
+
+- 🤖 **Local AI Integration**: Uses Ollama for privacy-focused AI responses
+- 🧠 **Smart Q&A**: Ask complex questions and get contextual answers
+- 🔍 **Hybrid Search**: Combines semantic search with AI generation
+- 🌐 **Multi-language Support**: Works with English, Chinese, and other languages
+- 📚 **Source Attribution**: Always cites which documents answers come from
+
+```bash
+# Quick start with AI features
+ollama pull llama2
+python app.py ask "What are the key concepts in my documents?"
+```
 
 ## Features
 
 - **Multi-format Support**: Parse and index content from PDF, Markdown, Excel, Word, PowerPoint, and plain text files
 - **Semantic Search**: Find relevant content using AI-powered vector embeddings
+- **🚀 AI Question Answering**: Get intelligent answers using local Ollama models
 - **Smart Chunking**: Automatically split large documents into manageable chunks while preserving context
 - **Triple Interface**: CLI, REST API, and modern web interface
 - **Local Storage**: All data stored locally for privacy and security
 - **Fast Retrieval**: FAISS-based vector search for quick and accurate results
 - **Modern UI**: Beautiful, responsive web interface with drag-and-drop file upload
 - **Real-time Feedback**: Progress indicators and live search results
+- **📊 Analytics**: Track usage patterns and system performance
 
 ## Project Structure
 

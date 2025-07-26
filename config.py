@@ -57,3 +57,31 @@ LOG_FILE = PROJECT_ROOT / "ai_memory_bank.log"
 
 # Frontend configuration
 FRONTEND_DIR = PROJECT_ROOT / "frontend" 
+
+# Ollama configuration
+OLLAMA_ENABLED = True  # Set to False to disable Ollama integration
+OLLAMA_BASE_URL = "http://localhost:11434"  # Default Ollama API URL
+OLLAMA_MODEL = "llama2"  # Default model (use "qwen" for Chinese users)
+OLLAMA_TIMEOUT = 60  # Request timeout in seconds
+OLLAMA_MAX_TOKENS = 2048  # Maximum tokens for response
+OLLAMA_TEMPERATURE = 0.7  # Model temperature for creativity
+
+# Available Ollama models (add your installed models here)
+AVAILABLE_OLLAMA_MODELS = [
+    "llama2",
+    "llama2:13b", 
+    "codellama",
+    "mistral",
+    "vicuna",
+    "orca-mini",
+    "llama2-chinese",  # For Chinese support
+    "qwen",  # Another Chinese model
+]
+
+# Question answering configuration
+QA_CONTEXT_CHUNKS = 5  # Number of chunks to include in context
+QA_MAX_CONTEXT_LENGTH = 4000  # Maximum context length for QA
+QA_SYSTEM_PROMPT = """You are an AI assistant helping users find information from their personal knowledge base. 
+Use the provided context to answer questions accurately and helpfully. 
+If the context doesn't contain relevant information, say so clearly.
+Always cite which document(s) your answer comes from.""" 

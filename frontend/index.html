@@ -3,135 +3,640 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Memory Bank</title>
+    <title>AI Memory Bank - Your Intelligent Knowledge Base</title>
     <link rel="stylesheet" href="/static/styles.css">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <h1><i class="fas fa-brain"></i> AI Memory Bank</h1>
-                <p>Your personal AI-powered knowledge management system</p>
+    <div class="app">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-brain"></i>
+                    <span>AI Memory Bank</span>
+                </div>
+                <button class="sidebar-toggle" id="sidebar-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
             </div>
-        </header>
+            
+            <nav class="sidebar-nav">
+                <a href="#dashboard" class="nav-item active" data-panel="dashboard">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#upload" class="nav-item" data-panel="upload">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <span>Add Documents</span>
+                </a>
+                <a href="#search" class="nav-item" data-panel="search">
+                    <i class="fas fa-search"></i>
+                    <span>Search</span>
+                </a>
+                <a href="#chat" class="nav-item" data-panel="chat">
+                    <i class="fas fa-robot"></i>
+                    <span>AI Assistant</span>
+                </a>
+                <a href="#documents" class="nav-item" data-panel="documents">
+                    <i class="fas fa-folder-open"></i>
+                    <span>Documents</span>
+                </a>
+                <a href="#settings" class="nav-item" data-panel="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </a>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="ai-status-indicator">
+                    <div class="status-dot" id="ai-status-dot"></div>
+                    <span id="ai-status-text">AI Ready</span>
+                </div>
+            </div>
+        </aside>
 
-        <!-- Main Content -->
+        <!-- Main Content Area -->
         <main class="main-content">
-            <!-- Search Section -->
-            <section class="search-section">
-                <div class="search-container">
-                    <h2><i class="fas fa-search"></i> Search Knowledge</h2>
-                    <div class="search-form">
-                        <div class="search-input-container">
-                            <input type="text" id="searchInput" placeholder="Ask me anything..." autocomplete="off">
-                            <button id="searchBtn" class="search-btn">
+            <!-- Top Header -->
+            <header class="top-header">
+                <div class="header-left">
+                    <button class="mobile-menu-btn" id="mobile-menu-btn">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h1 id="page-title">Dashboard</h1>
+                </div>
+                <div class="header-right">
+                    <div class="search-quick">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="Quick search..." id="quick-search">
+                    </div>
+                    <button class="notification-btn" id="notification-btn">
+                        <i class="fas fa-bell"></i>
+                        <span class="notification-badge" id="notification-badge">0</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Content Panels -->
+            <div class="content-panels">
+                <!-- Dashboard Panel -->
+                <div class="panel dashboard-panel active" id="dashboard-panel">
+                    <div class="dashboard-header">
+                        <h2>Welcome to Your AI Memory Bank</h2>
+                        <p>Your intelligent knowledge management system</p>
+                    </div>
+                    
+                    <!-- Stats Cards -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-file-alt"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="total-docs">0</h3>
+                                <p>Documents</p>
+                                <div class="stat-trend">
+                                    <i class="fas fa-arrow-up"></i>
+                                    <span>+12% this week</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-puzzle-piece"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="total-chunks">0</h3>
+                                <p>Text Chunks</p>
+                                <div class="stat-trend">
+                                    <i class="fas fa-arrow-up"></i>
+                                    <span>+8% this week</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="db-size">0 MB</h3>
+                                <p>Database Size</p>
+                                <div class="stat-trend">
+                                    <i class="fas fa-arrow-up"></i>
+                                    <span>+5% this week</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="last-updated">Never</h3>
+                                <p>Last Updated</p>
+                                <div class="stat-trend">
+                                    <i class="fas fa-circle"></i>
+                                    <span>Just now</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Actions -->
+                    <div class="quick-actions-section">
+                        <h3>Quick Actions</h3>
+                        <div class="quick-actions-grid">
+                            <button class="quick-action-btn" data-action="upload">
+                                <i class="fas fa-plus"></i>
+                                <span>Add Document</span>
+                            </button>
+                            <button class="quick-action-btn" data-action="search">
                                 <i class="fas fa-search"></i>
+                                <span>Search Knowledge</span>
+                            </button>
+                            <button class="quick-action-btn" data-action="chat">
+                                <i class="fas fa-robot"></i>
+                                <span>Ask AI</span>
+                            </button>
+                            <button class="quick-action-btn" data-action="documents">
+                                <i class="fas fa-folder"></i>
+                                <span>View Documents</span>
                             </button>
                         </div>
-                        <div class="search-options">
-                            <label>
-                                <input type="number" id="topK" value="5" min="1" max="20">
-                                results
-                            </label>
-                        </div>
                     </div>
-                </div>
-
-                <!-- Search Results -->
-                <div id="searchResults" class="search-results"></div>
-            </section>
-
-            <!-- Upload Section -->
-            <section class="upload-section">
-                <div class="upload-container">
-                    <h2><i class="fas fa-cloud-upload-alt"></i> Add Knowledge</h2>
                     
-                    <!-- File Upload -->
-                    <div class="upload-area" id="uploadArea">
-                        <div class="upload-icon">
-                            <i class="fas fa-file-upload"></i>
-                        </div>
-                        <div class="upload-text">
-                            <h3>Drop files here or click to browse</h3>
-                            <p>Supported: PDF, Markdown, Word, Excel, PowerPoint, Text</p>
-                        </div>
-                        <input type="file" id="fileInput" multiple accept=".pdf,.md,.markdown,.txt,.docx,.doc,.xlsx,.xls,.pptx,.ppt">
-                    </div>
-
-                    <!-- Text Input -->
-                    <div class="text-input-section">
-                        <h3><i class="fas fa-keyboard"></i> Or add text directly</h3>
-                        <textarea id="textInput" placeholder="Enter your text here..." rows="6"></textarea>
-                        <button id="storeTextBtn" class="store-text-btn">
-                            <i class="fas fa-save"></i> Store Text
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Upload Progress -->
-                <div id="uploadProgress" class="upload-progress hidden">
-                    <div class="progress-bar">
-                        <div class="progress-fill"></div>
-                    </div>
-                    <div class="progress-text">Uploading and processing...</div>
-                </div>
-            </section>
-
-            <!-- Statistics Section -->
-            <section class="stats-section">
-                <div class="stats-container">
-                    <h2><i class="fas fa-chart-bar"></i> Statistics</h2>
-                    <div class="stats-grid" id="statsGrid">
-                        <div class="stat-card">
-                            <div class="stat-icon"><i class="fas fa-file-alt"></i></div>
-                            <div class="stat-content">
-                                <div class="stat-number" id="totalDocs">-</div>
-                                <div class="stat-label">Documents</div>
+                    <!-- Recent Activity -->
+                    <div class="recent-activity-section">
+                        <h3>Recent Activity</h3>
+                        <div class="activity-list" id="activity-list">
+                            <div class="activity-item">
+                                <div class="activity-icon">
+                                    <i class="fas fa-upload"></i>
+                                </div>
+                                <div class="activity-content">
+                                    <h4>Add Your First Document</h4>
+                                    <p>Upload PDFs, Word docs, or paste text to get started</p>
+                                    <span class="activity-time">Get started</span>
+                                </div>
                             </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon"><i class="fas fa-puzzle-piece"></i></div>
-                            <div class="stat-content">
-                                <div class="stat-number" id="totalChunks">-</div>
-                                <div class="stat-label">Chunks</div>
+                            <div class="activity-item">
+                                <div class="activity-icon">
+                                    <i class="fas fa-robot"></i>
+                                </div>
+                                <div class="activity-content">
+                                    <h4>Configure AI Assistant</h4>
+                                    <p>Set up local models or connect online APIs</p>
+                                    <span class="activity-time">Configure</span>
+                                </div>
                             </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon"><i class="fas fa-database"></i></div>
-                            <div class="stat-content">
-                                <div class="stat-number" id="dbSize">-</div>
-                                <div class="stat-label">DB Size</div>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon"><i class="fas fa-clock"></i></div>
-                            <div class="stat-content">
-                                <div class="stat-number" id="lastUpdated">-</div>
-                                <div class="stat-label">Last Updated</div>
+                            <div class="activity-item">
+                                <div class="activity-icon">
+                                    <i class="fas fa-search"></i>
+                                </div>
+                                <div class="activity-content">
+                                    <h4>Search & Ask Questions</h4>
+                                    <p>Find information and get AI-powered answers</p>
+                                    <span class="activity-time">Try it</span>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </section>
+
+                <!-- Upload Panel -->
+                <div class="panel upload-panel" id="upload-panel">
+                    <div class="panel-header">
+                        <h2>Add Documents to Your Knowledge Base</h2>
+                        <p>Upload files or add text directly to expand your AI memory</p>
+                    </div>
+                    
+                    <div class="upload-content">
+                        <!-- File Upload Section -->
+                        <div class="upload-section">
+                            <h3><i class="fas fa-cloud-upload-alt"></i> Upload Files</h3>
+                            <div class="upload-zone" id="upload-zone">
+                                <div class="upload-icon">
+                                    <i class="fas fa-file-upload"></i>
+                                </div>
+                                <h4>Drop files here or click to browse</h4>
+                                <p>Supports PDF, Word, Excel, PowerPoint, Markdown, and Text files</p>
+                                <div class="supported-formats">
+                                    <span class="format-badge">PDF</span>
+                                    <span class="format-badge">DOCX</span>
+                                    <span class="format-badge">XLSX</span>
+                                    <span class="format-badge">PPTX</span>
+                                    <span class="format-badge">MD</span>
+                                    <span class="format-badge">TXT</span>
+                                </div>
+                                <input type="file" id="file-input" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.md,.txt" hidden>
+                                <button class="browse-btn" onclick="document.getElementById('file-input').click()">
+                                    <i class="fas fa-folder-open"></i>
+                                    Browse Files
+                                </button>
+                            </div>
+                            
+                            <!-- Upload Progress -->
+                            <div class="upload-progress hidden" id="upload-progress">
+                                <div class="progress-header">
+                                    <h4>Processing Files</h4>
+                                    <span class="progress-text" id="progress-text">0%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="progress-fill"></div>
+                                </div>
+                                <div class="progress-files" id="progress-files"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Text Input Section -->
+                        <div class="text-input-section">
+                            <h3><i class="fas fa-keyboard"></i> Add Text Directly</h3>
+                            <div class="text-input-container">
+                                <textarea id="text-input" placeholder="Paste your text content here... You can add notes, articles, or any information you want to remember." rows="8"></textarea>
+                                <div class="text-input-footer">
+                                    <div class="text-stats">
+                                        <span id="text-char-count">0 characters</span>
+                                        <span id="text-word-count">0 words</span>
+                                    </div>
+                                    <button class="submit-btn" id="submit-text">
+                                        <i class="fas fa-save"></i>
+                                        Save to Memory
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search Panel -->
+                <div class="panel search-panel" id="search-panel">
+                    <div class="panel-header">
+                        <h2>Search Your Knowledge Base</h2>
+                        <p>Find relevant information using semantic search</p>
+                    </div>
+                    
+                    <div class="search-content">
+                        <!-- Search Bar -->
+                        <div class="search-bar-container">
+                            <div class="search-bar">
+                                <i class="fas fa-search search-icon"></i>
+                                <input type="text" id="search-input" placeholder="What would you like to find in your documents?">
+                                <button class="search-btn" id="search-btn">
+                                    <i class="fas fa-search"></i>
+                                    Search
+                                </button>
+                            </div>
+                            
+                            <div class="search-options">
+                                <div class="search-option">
+                                    <label>Results:</label>
+                                    <select id="search-limit">
+                                        <option value="5">5 results</option>
+                                        <option value="10">10 results</option>
+                                        <option value="15">15 results</option>
+                                        <option value="20">20 results</option>
+                                    </select>
+                                </div>
+                                <div class="search-option">
+                                    <label>Sort by:</label>
+                                    <select id="search-sort">
+                                        <option value="relevance">Relevance</option>
+                                        <option value="date">Date Added</option>
+                                        <option value="filename">Filename</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Search Results -->
+                        <div class="search-results-container">
+                            <div class="search-results-header hidden" id="search-results-header">
+                                <h3>Search Results</h3>
+                                <span id="results-count">0 results found</span>
+                            </div>
+                            
+                            <div class="search-results" id="search-results"></div>
+                            
+                            <!-- No Results State -->
+                            <div class="no-results hidden" id="no-results">
+                                <div class="no-results-icon">
+                                    <i class="fas fa-search"></i>
+                                </div>
+                                <h3>No results found</h3>
+                                <p>Try adjusting your search terms or adding more documents to your knowledge base.</p>
+                                <button class="action-btn" data-action="upload">
+                                    <i class="fas fa-plus"></i>
+                                    Add Documents
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Panel -->
+                <div class="panel chat-panel" id="chat-panel">
+                    <div class="panel-header">
+                        <h2>AI Assistant</h2>
+                        <div class="chat-controls">
+                            <div class="ai-status">
+                                <span class="status-dot" id="chat-status-dot"></span>
+                                <span id="chat-status-text">Ready</span>
+                            </div>
+                            <button class="clear-chat-btn" id="clear-chat-btn">
+                                <i class="fas fa-trash"></i>
+                                Clear Chat
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-container">
+                        <!-- Chat Messages -->
+                        <div class="chat-messages" id="chat-messages">
+                            <div class="welcome-message">
+                                <div class="bot-avatar">
+                                    <i class="fas fa-robot"></i>
+                                </div>
+                                <div class="message-content">
+                                    <h4>Hello! I'm your AI assistant</h4>
+                                    <p>I can help you find information in your documents and answer questions based on your knowledge base. Ask me anything!</p>
+                                    <div class="suggested-questions">
+                                        <span class="suggestion" data-question="What documents do I have?">What documents do I have?</span>
+                                        <span class="suggestion" data-question="Summarize my recent research">Summarize my recent research</span>
+                                        <span class="suggestion" data-question="Find programming tutorials">Find programming tutorials</span>
+                                        <span class="suggestion" data-question="What are the key concepts in my documents?">Key concepts in my documents</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Chat Input -->
+                        <div class="chat-input-area">
+                            <div class="chat-input-container">
+                                <textarea id="chat-input" placeholder="Ask me anything about your documents..." rows="1"></textarea>
+                                <div class="chat-input-actions">
+                                    <button class="send-btn" id="send-btn">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="chat-settings">
+                                <label class="setting-item">
+                                    <input type="checkbox" id="use-ai" checked>
+                                    <span>AI Enhancement</span>
+                                </label>
+                                <label class="setting-item">
+                                    <input type="checkbox" id="use-local" checked>
+                                    <span>Local Model</span>
+                                </label>
+                                <div class="model-selector">
+                                    <select id="chat-model">
+                                        <option value="">Auto-select</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Documents Panel -->
+                <div class="panel documents-panel" id="documents-panel">
+                    <div class="panel-header">
+                        <h2>Your Documents</h2>
+                        <p>Manage and view all documents in your knowledge base</p>
+                    </div>
+                    
+                    <div class="documents-content">
+                        <div class="documents-toolbar">
+                            <div class="documents-search">
+                                <i class="fas fa-search"></i>
+                                <input type="text" placeholder="Search documents..." id="documents-search">
+                            </div>
+                            <div class="documents-filters">
+                                <select id="document-type-filter">
+                                    <option value="">All Types</option>
+                                    <option value="pdf">PDF</option>
+                                    <option value="word">Word</option>
+                                    <option value="excel">Excel</option>
+                                    <option value="powerpoint">PowerPoint</option>
+                                    <option value="markdown">Markdown</option>
+                                    <option value="text">Text</option>
+                                </select>
+                                <button class="refresh-btn" id="refresh-documents">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="documents-grid" id="documents-grid">
+                            <!-- Documents will be loaded here -->
+                        </div>
+                        
+                        <div class="documents-empty hidden" id="documents-empty">
+                            <div class="empty-icon">
+                                <i class="fas fa-folder-open"></i>
+                            </div>
+                            <h3>No documents yet</h3>
+                            <p>Start by adding some documents to your knowledge base</p>
+                            <button class="action-btn" data-action="upload">
+                                <i class="fas fa-plus"></i>
+                                Add Your First Document
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Panel -->
+                <div class="panel settings-panel" id="settings-panel">
+                    <div class="panel-header">
+                        <h2>Settings & Configuration</h2>
+                        <p>Configure AI models and system preferences</p>
+                    </div>
+                    
+                    <div class="settings-content">
+                        <div class="settings-tabs">
+                            <button class="tab-btn active" data-tab="ai-models">AI Models</button>
+                            <button class="tab-btn" data-tab="search">Search</button>
+                            <button class="tab-btn" data-tab="system">System</button>
+                        </div>
+                        
+                        <!-- AI Models Tab -->
+                        <div class="tab-content active" id="ai-models-tab">
+                            <div class="settings-section">
+                                <h3>Local AI Models (Ollama)</h3>
+                                <div class="setting-group">
+                                    <label>Default Model</label>
+                                    <select id="local-model">
+                                        <option value="">Select Model...</option>
+                                    </select>
+                                    <p class="setting-help">Choose your preferred local AI model for question answering</p>
+                                </div>
+                                
+                                <div class="setting-group">
+                                    <label>Temperature <span class="temp-value">0.7</span></label>
+                                    <input type="range" id="temperature" min="0.1" max="1.0" step="0.1" value="0.7">
+                                    <div class="range-labels">
+                                        <span>Focused</span>
+                                        <span>Creative</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="setting-group">
+                                    <label>Max Response Length</label>
+                                    <select id="max-tokens">
+                                        <option value="1024">Short (1K tokens)</option>
+                                        <option value="2048" selected>Medium (2K tokens)</option>
+                                        <option value="4096">Long (4K tokens)</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="status-card">
+                                    <div class="status-icon" id="ollama-status">
+                                        <i class="fas fa-circle"></i>
+                                    </div>
+                                    <div class="status-info">
+                                        <h4>Ollama Status</h4>
+                                        <p id="ollama-status-text">Checking connection...</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="settings-section">
+                                <h3>Online AI Services</h3>
+                                <div class="setting-group">
+                                    <label>API Provider</label>
+                                    <select id="api-provider">
+                                        <option value="openai">OpenAI (GPT-3.5/4)</option>
+                                        <option value="anthropic">Anthropic (Claude)</option>
+                                        <option value="gemini">Google Gemini</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="setting-group">
+                                    <label>API Key</label>
+                                    <input type="password" id="api-key" placeholder="Enter your API key...">
+                                </div>
+                                
+                                <div class="setting-group">
+                                    <label>Model</label>
+                                    <select id="online-model">
+                                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                                        <option value="gpt-4">GPT-4</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="status-card">
+                                    <div class="status-icon" id="api-status">
+                                        <i class="fas fa-circle"></i>
+                                    </div>
+                                    <div class="status-info">
+                                        <h4>API Status</h4>
+                                        <p id="api-status-text">Configure API key</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Search Tab -->
+                        <div class="tab-content" id="search-tab">
+                            <div class="settings-section">
+                                <h3>Search Configuration</h3>
+                                <div class="setting-group">
+                                    <label>Default Results Count</label>
+                                    <select id="default-search-results">
+                                        <option value="5">5 results</option>
+                                        <option value="10" selected>10 results</option>
+                                        <option value="15">15 results</option>
+                                        <option value="20">20 results</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="setting-group">
+                                    <label>Similarity Threshold</label>
+                                    <input type="range" id="similarity-threshold" min="0.1" max="1.0" step="0.1" value="0.3">
+                                    <div class="range-labels">
+                                        <span>More Results</span>
+                                        <span>Higher Quality</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- System Tab -->
+                        <div class="tab-content" id="system-tab">
+                            <div class="settings-section">
+                                <h3>System Information</h3>
+                                <div class="info-grid">
+                                    <div class="info-item">
+                                        <label>Version</label>
+                                        <span>1.0.0</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <label>Database Size</label>
+                                        <span id="settings-db-size">0 MB</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <label>Total Documents</label>
+                                        <span id="settings-total-docs">0</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <label>Last Updated</label>
+                                        <span id="settings-last-updated">Never</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="settings-section">
+                                <h3>Data Management</h3>
+                                <div class="danger-zone">
+                                    <h4>Danger Zone</h4>
+                                    <p>These actions cannot be undone.</p>
+                                    <button class="danger-btn" id="clear-data-btn">
+                                        <i class="fas fa-trash"></i>
+                                        Clear All Data
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </main>
 
         <!-- Loading Overlay -->
-        <div id="loadingOverlay" class="loading-overlay hidden">
-            <div class="loading-spinner">
-                <i class="fas fa-brain fa-spin"></i>
-                <p>Processing...</p>
+        <div class="loading-overlay hidden" id="loading-overlay">
+            <div class="loading-content">
+                <div class="loading-spinner">
+                    <div class="spinner"></div>
+                </div>
+                <h3 id="loading-title">Processing...</h3>
+                <p id="loading-message">Please wait</p>
             </div>
         </div>
 
-        <!-- Notification Toast -->
-        <div id="notification" class="notification hidden">
-            <div class="notification-content">
-                <i class="notification-icon"></i>
-                <span class="notification-message"></span>
+        <!-- Toast Notifications -->
+        <div class="toast-container" id="toast-container"></div>
+
+        <!-- Modal Overlay -->
+        <div class="modal-overlay hidden" id="modal-overlay">
+            <div class="modal" id="modal">
+                <div class="modal-header">
+                    <h3 id="modal-title">Modal Title</h3>
+                    <button class="modal-close" id="modal-close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-content" id="modal-content">
+                    <!-- Modal content will be inserted here -->
+                </div>
             </div>
-            <button class="notification-close">&times;</button>
         </div>
     </div>
 
